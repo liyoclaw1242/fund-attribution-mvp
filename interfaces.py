@@ -44,3 +44,22 @@ class AISummary(TypedDict):
     verification_passed: bool
     fallback_used: bool
     ai_prompt: str          # full prompt for debugging
+
+
+# --- 8.5 Fund Comparison (v2.0) ---
+
+@dataclass
+class FundMetrics:
+    fund_code: str
+    total_return: float
+    sharpe_ratio: Optional[float] = None   # simplified single-period
+    max_drawdown: Optional[float] = None   # simplified single-period
+    sector_weights: Optional[dict] = None  # {industry: weight}
+    attribution: Optional[dict] = None     # AttributionResult
+
+
+@dataclass
+class FundComparison:
+    funds: list  # List[FundMetrics]
+    attribution_diffs: Optional[dict] = None  # per-industry diffs
+    ai_explanation: str = ""
