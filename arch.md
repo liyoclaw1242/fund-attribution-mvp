@@ -8,6 +8,10 @@
 - **AI Summary**: Constructs prompts from attribution results, calls Claude API, verifies numbers via regex, falls back to rule-based template on mismatch. Produces LINE message, PDF summary, and advisor note in Traditional Chinese.
 - **Report Generation**: Waterfall chart + sector contribution chart (Matplotlib, CJK fonts), 2-page PDF (fpdf2) with KPIs, narrative, charts, detail table, disclaimer.
 - **Presentation**: Streamlit UI for input (fund code or CSV upload), benchmark selection, BF mode toggle, result display (KPI cards, charts, AI tabs), and export (PNG/PDF).
+- **Client Management** (v2.0): Multi-client portfolio DB, cross-bank aggregation, KYC risk levels. Key entities: Client, ClientHolding, ClientGoal.
+- **Anomaly & Crisis** (v2.0): 6-signal anomaly detection engine, crisis response with historical drawdown comparison. Key entities: AnomalyAlert, CrisisReport.
+- **Advisor AI Tools** (v2.0): Morning briefing generator, weekly LINE draft generator, fund comparator with AI explanations. Key entities: MorningBriefing, LineDraft, FundComparison.
+- **Goal Planning** (v2.1): Monte Carlo retirement/house goal simulation, 0050 ETF mirror comparison, fee transparency. Key entities: GoalConfig, GoalSimResult, ETFMirrorResult.
 
 ### Bounded Contexts
 ```mermaid
@@ -161,19 +165,30 @@ sequenceDiagram
 ## Product Roadmap Context
 
 ### Current Phase
-**MVP** — Sprint 0 in progress (golden dataset + dev environment)
+**v2.0** — MVP complete (Sprints 0-4), now entering v2.0 Advisor AI features
 
 ### Sprint Plan
-| Sprint | Focus | Issues |
-|--------|-------|--------|
-| 0 | Golden dataset + dev environment | #1, #2 |
-| 1 | Data pipeline (SITCA, TWSE, cache, mapper) | #3, #4, #5, #6, #16 |
-| 2 | Attribution engine + basic UI | #7, #8, #9 |
-| 3 | AI summary + charts + PDF | #10, #11, #12, #13 |
-| 4 | Deploy + QA | #14, #15 |
+| Sprint | Focus | Issues | Status |
+|--------|-------|--------|--------|
+| 0 | Golden dataset + dev environment | #1, #2 | ✅ Done |
+| 1 | Data pipeline (SITCA, TWSE, cache, mapper) | #3, #4, #5, #6, #16 | ✅ Done |
+| 2 | Attribution engine + basic UI | #7, #8, #9 | ✅ Done |
+| 3 | AI summary + charts + PDF | #10, #11, #12, #13 | ✅ Done |
+| 4 | Deploy + QA | #14, #15 | ✅ Done |
+| 5 | Client Portfolio DB + Anomaly Detection | #34, #35 | 🔵 Ready/Blocked |
+| 6 | Morning Briefing + Comparator + Crisis | #36, #37, #39 | 🔒 Blocked |
+| 7 | Health Check + LINE Drafts + v2.0 FE | #38, #40, #45 | 🔒 Blocked |
+| 8 | Goal Tracker + ETF Mirror + Goal FE | #41, #42, #46 | 🔒 Blocked |
+| 9+ | Fee Calculator + Inaction Cost | #43, #44 | 🔵 #44 Ready |
 
 ### Recent Decisions
-- 2026-04-06: All 16 issues pre-decomposed from Blueprint v1.1, dependency chain established
+- 2026-04-07: v1.1.2 Feature Registry decomposed into 14 issues (#34-#47) across Sprints 5-9+
+- 2026-04-07: F-201 (Portfolio DB) is critical path — all v2.0 features depend on it
+- 2026-04-07: BE+FE features split: BE builds engine, single FE task (#45) wires all v2.0 dashboard UI
+- 2026-04-07: F-304 (Inaction Cost) has no deps — ready immediately as standalone sales tool
+- 2026-04-07: External market data (PE, RSI, fund flows) stubbed in F-202 — real integration deferred
+- 2026-04-07: MoneyDJ scraping (DS-05) deferred — HIGH risk, use SITCA/TWSE only for now
+- 2026-04-06: All 16 MVP issues delivered (Sprints 0-4)
 - BF2 as default mode, BF3 opt-in (simpler first experience for advisors)
 - SITCA data via manual Excel upload (no web scraping in MVP)
 - Number verification (regex) as AI hallucination guard — fallback to rule-based template
@@ -181,18 +196,29 @@ sequenceDiagram
 ### Known Tech Debt
 | Item | Impact | Priority |
 |------|--------|----------|
-| No golden dataset yet | Cannot validate engine correctness | Critical (Sprint 0) |
-| All modules are stubs | No functionality | Critical (being addressed) |
-| No automated tests beyond golden | Regression risk | Medium |
+| No auth / multi-user | Single advisor assumed | Medium (needed for v2.0 client features) |
+| External market data stubs in F-202 | PE/RSI/flow signals non-functional | Medium (needs data source) |
+| MoneyDJ integration deferred | Fund NAV history unavailable | Low (scraping risk) |
 | Hardcoded benchmark options (3) | Limited coverage | Low |
-| No auth / multi-user | Single advisor assumed | Low (post-MVP) |
+| No E2E test coverage | Regression risk on integration | Medium |
 
-### Planned Features (post-MVP)
-| Feature | Domain Impact | Dependencies |
-|---------|--------------|-------------|
-| SITCA auto-fetch (monthly SOP) | New cron job, data pipeline extension | Issue #16 |
-| Multi-period comparison | Engine needs time-series support | Engine refactor |
-| Custom benchmark composition | New UI for benchmark building | DB schema change |
+### Planned Features (v2.0 → v2.1)
+| Feature | Issue | Domain Impact | Dependencies | Sprint |
+|---------|-------|--------------|-------------|--------|
+| Client Portfolio DB | #34 | New `clients` + `client_portfolios` tables | F-104 (done) | 5 |
+| Anomaly Detection | #35 | 6 signal types, `anomaly_alerts` table | #34 | 5-6 |
+| Morning Briefing | #36 | Daily digest + talking points | #34, #35 | 6 |
+| Fund Comparator | #37 | Side-by-side Brinson + AI explanation | F-101 (done) | 6 |
+| Cross-Bank Health Check | #38 | Multi-bank aggregation, risk-KYC check | #34 | 7 |
+| Crisis Response | #39 | Market crash detection + 安撫話術 | #34, #35 | 7 |
+| Weekly LINE Drafts | #40 | Personalized client messages | #34 | 7 |
+| Goal Tracker (BE) | #41 | Monte Carlo simulation, `client_goals` table | #34 | 8 |
+| ETF 0050 Mirror | #42 | Portfolio vs 0050 comparison | #34 | 8 |
+| Fee Calculator | #43 | TER computation + alternatives | #34 | 9+ |
+| Inaction Cost (FE) | #44 | Standalone inflation erosion chart | None | 9+ |
+| v2.0 Dashboard FE | #45 | Briefing+Anomaly+Crisis+Comparator+Health UI | #35-#39 | 7-8 |
+| Goal Tracker FE | #46 | Monte Carlo fan chart + goal CRUD | #41 | 8 |
+| QA Sprint 5-6 | #47 | Verification of #34-#37 | #34-#37 | 6 |
 
 ## Failure Modes
 
