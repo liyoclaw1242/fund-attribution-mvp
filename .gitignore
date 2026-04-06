@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.env
+*.db
+*.sqlite
+data/sitca_raw/
+data/twse_raw/
+output/
+*.png
+*.pdf
+.streamlit/secrets.toml
+venv/
+.venv/
+dist/
+*.egg-info/
