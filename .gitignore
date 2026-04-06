@@ -5,6 +5,7 @@ __pycache__/
 *.sqlite
 data/sitca_raw/
 data/twse_raw/
+test_data/*.json
 output/
 *.png
 *.pdf
