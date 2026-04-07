@@ -66,6 +66,18 @@ class ClientHolding:
     added_at: str = ""
 
 
+# --- 8.7 Weekly LINE Drafts (v2.0) ---
+
+@dataclass
+class LineDraft:
+    """Weekly LINE message draft for a client."""
+    client_id: str
+    client_name: str
+    message: str                # <200 chars Traditional Chinese
+    generated_at: str = ""
+    sent: bool = False
+
+
 # --- 8.5 Fee Transparency (v2.0) ---
 
 @dataclass
@@ -128,7 +140,28 @@ class GoalSimResult:
     suggestions: List[str] = field(default_factory=list)
 
 
-# --- 8.7 ETF Benchmark Mirror (v2.0) ---
+# --- 8.7 Fund Comparison Output ---
+
+@dataclass
+class FundMetrics:
+    """Metrics for a single fund in a comparison."""
+    fund_code: str
+    total_return: float
+    sharpe_ratio: Optional[float]
+    max_drawdown: Optional[float]
+    sector_weights: Dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
+class FundComparison:
+    """Side-by-side comparison of 2-4 funds."""
+    funds: List[FundMetrics]
+    attribution_results: Dict[str, dict] = field(default_factory=dict)
+    attribution_diffs: Dict[str, dict] = field(default_factory=dict)
+    ai_explanation: str = ""
+
+
+# --- 8.7b ETF Benchmark Mirror (v2.0) ---
 
 @dataclass
 class ETFMirrorResult:

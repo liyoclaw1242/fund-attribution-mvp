@@ -111,3 +111,19 @@ CREATE TABLE IF NOT EXISTS anomaly_alerts (
 
 CREATE INDEX IF NOT EXISTS idx_alerts_client ON anomaly_alerts(client_id);
 CREATE INDEX IF NOT EXISTS idx_alerts_signal ON anomaly_alerts(signal_type);
+
+-- v2.0: Weekly LINE drafts
+
+CREATE TABLE IF NOT EXISTS line_drafts (
+    draft_id    TEXT PRIMARY KEY,
+    client_id   TEXT NOT NULL,
+    message     TEXT NOT NULL,
+    week        TEXT NOT NULL,       -- ISO week, e.g. "2026-W15"
+    generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    reviewed_at TEXT,
+    sent_at    TEXT,
+    FOREIGN KEY (client_id) REFERENCES clients(client_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_drafts_client ON line_drafts(client_id);
+CREATE INDEX IF NOT EXISTS idx_drafts_week ON line_drafts(week);
