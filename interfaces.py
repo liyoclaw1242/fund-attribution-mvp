@@ -128,6 +128,26 @@ class GoalSimResult:
     suggestions: List[str] = field(default_factory=list)
 
 
+# --- 8.8 Portfolio Health Check (v2.0) ---
+
+@dataclass
+class HealthIssue:
+    """A single health check finding."""
+    check_type: str             # concentration, asset_class, kyc_mismatch
+    severity: str               # warning, critical
+    description: str            # Chinese description
+    suggestion: str             # Chinese suggestion
+
+
+@dataclass
+class HealthCheckResult:
+    """Full portfolio health check result."""
+    client_id: str
+    total_value: float          # TWD
+    bank_breakdown: Dict[str, float] = field(default_factory=dict)
+    issues: List[HealthIssue] = field(default_factory=list)
+
+
 # --- 8.9 Anomaly Detection (v2.0) ---
 
 @dataclass
