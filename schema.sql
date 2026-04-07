@@ -172,3 +172,14 @@ CREATE TABLE IF NOT EXISTS offshore_fund_cache (
     fetched_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (fund_id, data_type, period)
 );
+
+-- v2.0: Benchmark weight cache (auto-computed from TWSE)
+
+CREATE TABLE IF NOT EXISTS benchmark_weight (
+    industry   TEXT NOT NULL,
+    date       TEXT NOT NULL,
+    weight     REAL NOT NULL,
+    market_cap INTEGER,
+    fetched_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (industry, date)
+);
