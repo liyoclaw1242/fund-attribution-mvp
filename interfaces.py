@@ -161,6 +161,19 @@ class FundComparison:
     ai_explanation: str = ""
 
 
+# --- 8.7b ETF Benchmark Mirror (v2.0) ---
+
+@dataclass
+class ETFMirrorResult:
+    """Result of comparing client portfolio vs 0050 ETF benchmark."""
+    client_return: float        # client's weighted portfolio return
+    etf_return: float           # 0050 (or proxy) return
+    diff: float                 # client_return - etf_return
+    is_winning: bool            # True if client beats 0050
+    brinson_explanation: str    # Brinson-based explanation (when losing)
+    rebalance_suggestion: str   # AI rebalance suggestion (when losing)
+
+
 # --- 8.8 Portfolio Health Check (v2.0) ---
 
 @dataclass
