@@ -176,12 +176,16 @@ sequenceDiagram
 | 3 | AI summary + charts + PDF | #10, #11, #12, #13 | ✅ Done |
 | 4 | Deploy + QA | #14, #15 | ✅ Done |
 | 5 | Client Portfolio DB + Anomaly Detection | #34, #35 | ✅ Done |
-| 6 | Morning Briefing + Comparator + Crisis | #36, #37, #39 | 🔵 #36, #39 Unblocked |
-| 7 | Health Check + LINE Drafts + v2.0 FE | #38, #40, #45 | 🔒 Blocked (#45 on #36) |
-| 8 | Goal Tracker + ETF Mirror + Goal FE | #41, #42, #46 | 🟡 #46 in Design review |
+| 6 | Morning Briefing + Comparator + Crisis | #36, #37, #39 | 🟡 #37 Done, #36/#39 → BE |
+| 7 | Health Check + LINE Drafts + v2.0 FE | #38, #40, #45 | 🟡 #38/#40 Done, #45 blocked on #36 |
+| 8 | Goal Tracker + ETF Mirror + Goal FE | #41, #42, #46 | ✅ Done |
 | 9+ | Fee Calculator + Inaction Cost | #43, #44 | 🔵 #44 Ready |
 
 ### Recent Decisions
+- 2026-04-07: Sprint 8 complete — #41/#42/#46 all merged. #37/#40 also merged (Sprint 6-7 partial)
+- 2026-04-07: Design PR #65 superseded FE PR #58 for Goal Tracker — Design-refined version merged
+- 2026-04-07: #36 (Morning Briefing) + #39 (Crisis Response) dispatched to BE — last Sprint 6 items
+- 2026-04-07: interfaces.py continues to be merge-conflict hotspot — multiple features add dataclasses
 - 2026-04-07: Sprint 5 complete — #34 (Portfolio DB) + #35 (Anomaly Detection) both merged
 - 2026-04-07: #35 merge unblocked #36 (Morning Briefing) and #39 (Crisis Response) for Sprint 6
 - 2026-04-07: #46 (Goal Tracker FE) routed to Design for visual review after QA code approval
