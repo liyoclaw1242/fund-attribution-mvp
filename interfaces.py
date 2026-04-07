@@ -100,3 +100,29 @@ class FeeReport:
     total_annual_fee: float     # TWD
     fund_fees: List[FundFee] = field(default_factory=list)
     alternatives: List[Alternative] = field(default_factory=list)
+
+
+# --- 8.6 Goal Tracking (v2.0) ---
+
+@dataclass
+class GoalConfig:
+    """Client financial goal configuration."""
+    target_amount: float        # TWD
+    target_year: int            # e.g. 2040
+    monthly_contribution: float # TWD per month
+    risk_tolerance: str = "moderate"  # conservative, moderate, aggressive
+    goal_type: str = "retirement"     # retirement, house, education
+    current_savings: float = 0.0      # TWD, starting balance
+
+
+@dataclass
+class GoalSimResult:
+    """Monte Carlo simulation result for a financial goal."""
+    success_probability: float  # 0.0–1.0
+    median_outcome: float       # TWD, p50
+    p10_outcome: float          # TWD, pessimistic
+    p90_outcome: float          # TWD, optimistic
+    target_amount: float        # TWD, for reference
+    years_to_goal: int
+    num_paths: int
+    suggestions: List[str] = field(default_factory=list)
