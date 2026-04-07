@@ -111,3 +111,14 @@ CREATE TABLE IF NOT EXISTS anomaly_alerts (
 
 CREATE INDEX IF NOT EXISTS idx_alerts_client ON anomaly_alerts(client_id);
 CREATE INDEX IF NOT EXISTS idx_alerts_signal ON anomaly_alerts(signal_type);
+
+-- v2.0: Morning briefings
+
+CREATE TABLE IF NOT EXISTS briefings (
+    briefing_id  TEXT PRIMARY KEY,
+    date         TEXT NOT NULL,
+    content_json TEXT NOT NULL,
+    generated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_briefings_date ON briefings(date);

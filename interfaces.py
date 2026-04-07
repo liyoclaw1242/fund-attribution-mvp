@@ -172,3 +172,24 @@ class AnomalyConfig:
     foreign_sell_consecutive_days: int = 5
     concentration_threshold: float = 0.40
     style_drift_threshold: float = 0.15
+
+
+# --- 8.10 Morning Briefing (v2.0) ---
+
+@dataclass
+class BriefingItem:
+    """A single alert item in the morning briefing."""
+    signal_type: str            # from AnomalyAlert
+    severity: str               # critical, warning, info
+    affected_clients: List[str] # list of client names
+    affected_client_ids: List[str]
+    suggested_action: str       # advisor action in Chinese
+    talking_points: str         # client-facing talking points in Chinese
+
+
+@dataclass
+class MorningBriefing:
+    """Daily morning briefing for advisors."""
+    date: str                   # ISO date
+    items: List[BriefingItem] = field(default_factory=list)
+    summary: str = ""           # AI-generated executive summary
