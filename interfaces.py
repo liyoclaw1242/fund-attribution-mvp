@@ -66,6 +66,18 @@ class ClientHolding:
     added_at: str = ""
 
 
+# --- 8.7 Weekly LINE Drafts (v2.0) ---
+
+@dataclass
+class LineDraft:
+    """Weekly LINE message draft for a client."""
+    client_id: str
+    client_name: str
+    message: str                # <200 chars Traditional Chinese
+    generated_at: str = ""
+    sent: bool = False
+
+
 # --- 8.5 Fee Transparency (v2.0) ---
 
 @dataclass
