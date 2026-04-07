@@ -176,12 +176,13 @@ sequenceDiagram
 | 3 | AI summary + charts + PDF | #10, #11, #12, #13 | ✅ Done |
 | 4 | Deploy + QA | #14, #15 | ✅ Done |
 | 5 | Client Portfolio DB + Anomaly Detection | #34, #35 | ✅ Done |
-| 6 | Morning Briefing + Comparator + Crisis | #36, #37, #39 | 🟡 #37 Done, #36/#39 → BE |
-| 7 | Health Check + LINE Drafts + v2.0 FE | #38, #40, #45 | 🟡 #38/#40 Done, #45 blocked on #36 |
+| 6 | Morning Briefing + Comparator + Crisis | #36, #37, #39 | ✅ Done |
+| 7 | Health Check + LINE Drafts + v2.0 FE | #38, #40, #45 | 🟡 #38/#40 Done, #45 unblocked → FE |
 | 8 | Goal Tracker + ETF Mirror + Goal FE | #41, #42, #46 | ✅ Done |
 | 9+ | Fee Calculator + Inaction Cost | #43, #44 | 🔵 #44 Ready |
 
 ### Recent Decisions
+- 2026-04-07: Sprint 6 complete — #36/#39 merged. Unblocked #45 (v2.0 Dashboard FE) + #47 (QA Sprint 5-6)
 - 2026-04-07: Sprint 8 complete — #41/#42/#46 all merged. #37/#40 also merged (Sprint 6-7 partial)
 - 2026-04-07: Design PR #65 superseded FE PR #58 for Goal Tracker — Design-refined version merged
 - 2026-04-07: #36 (Morning Briefing) + #39 (Crisis Response) dispatched to BE — last Sprint 6 items
