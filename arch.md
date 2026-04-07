@@ -175,13 +175,16 @@ sequenceDiagram
 | 2 | Attribution engine + basic UI | #7, #8, #9 | ✅ Done |
 | 3 | AI summary + charts + PDF | #10, #11, #12, #13 | ✅ Done |
 | 4 | Deploy + QA | #14, #15 | ✅ Done |
-| 5 | Client Portfolio DB + Anomaly Detection | #34, #35 | 🔵 Ready/Blocked |
-| 6 | Morning Briefing + Comparator + Crisis | #36, #37, #39 | 🔒 Blocked |
-| 7 | Health Check + LINE Drafts + v2.0 FE | #38, #40, #45 | 🔒 Blocked |
-| 8 | Goal Tracker + ETF Mirror + Goal FE | #41, #42, #46 | 🔒 Blocked |
+| 5 | Client Portfolio DB + Anomaly Detection | #34, #35 | ✅ Done |
+| 6 | Morning Briefing + Comparator + Crisis | #36, #37, #39 | 🔵 #36, #39 Unblocked |
+| 7 | Health Check + LINE Drafts + v2.0 FE | #38, #40, #45 | 🔒 Blocked (#45 on #36) |
+| 8 | Goal Tracker + ETF Mirror + Goal FE | #41, #42, #46 | 🟡 #46 in Design review |
 | 9+ | Fee Calculator + Inaction Cost | #43, #44 | 🔵 #44 Ready |
 
 ### Recent Decisions
+- 2026-04-07: Sprint 5 complete — #34 (Portfolio DB) + #35 (Anomaly Detection) both merged
+- 2026-04-07: #35 merge unblocked #36 (Morning Briefing) and #39 (Crisis Response) for Sprint 6
+- 2026-04-07: #46 (Goal Tracker FE) routed to Design for visual review after QA code approval
 - 2026-04-07: v1.1.2 Feature Registry decomposed into 14 issues (#34-#47) across Sprints 5-9+
 - 2026-04-07: F-201 (Portfolio DB) is critical path — all v2.0 features depend on it
 - 2026-04-07: BE+FE features split: BE builds engine, single FE task (#45) wires all v2.0 dashboard UI
