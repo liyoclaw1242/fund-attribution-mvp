@@ -92,3 +92,22 @@ CREATE TABLE IF NOT EXISTS client_goals (
 );
 
 CREATE INDEX IF NOT EXISTS idx_goals_client ON client_goals(client_id);
+
+-- v2.0: Anomaly alerts
+
+CREATE TABLE IF NOT EXISTS anomaly_alerts (
+    alert_id     TEXT PRIMARY KEY,
+    client_id    TEXT NOT NULL,
+    fund_code    TEXT NOT NULL,
+    signal_type  TEXT NOT NULL,
+    severity     TEXT NOT NULL DEFAULT 'warning',
+    value        REAL,
+    threshold    REAL,
+    message      TEXT,
+    detected_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    acknowledged_at TEXT,
+    FOREIGN KEY (client_id) REFERENCES clients(client_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_alerts_client ON anomaly_alerts(client_id);
+CREATE INDEX IF NOT EXISTS idx_alerts_signal ON anomaly_alerts(signal_type);

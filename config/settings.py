@@ -24,3 +24,11 @@ COLORS = {
     "positive": "#1D9E75",
     "negative": "#E24B4A",
 }
+
+# Anomaly detection thresholds (overridable via env)
+ANOMALY_PE_PERCENTILE = float(os.getenv("ANOMALY_PE_PERCENTILE", "90"))
+ANOMALY_RSI_OVERBOUGHT = float(os.getenv("ANOMALY_RSI_OVERBOUGHT", "70"))
+ANOMALY_OUTFLOW_DAYS = int(os.getenv("ANOMALY_OUTFLOW_DAYS", "5"))
+ANOMALY_FOREIGN_SELL_DAYS = int(os.getenv("ANOMALY_FOREIGN_SELL_DAYS", "5"))
+ANOMALY_CONCENTRATION = float(os.getenv("ANOMALY_CONCENTRATION", "0.40"))
+ANOMALY_STYLE_DRIFT = float(os.getenv("ANOMALY_STYLE_DRIFT", "0.15"))

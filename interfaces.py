@@ -126,3 +126,29 @@ class GoalSimResult:
     years_to_goal: int
     num_paths: int
     suggestions: List[str] = field(default_factory=list)
+
+
+# --- 8.9 Anomaly Detection (v2.0) ---
+
+@dataclass
+class AnomalyAlert:
+    """A detected anomaly signal for a client's holding."""
+    client_id: str
+    fund_code: str
+    signal_type: str            # pe_percentile, rsi_overbought, fund_outflow,
+                                # foreign_selling, concentration_spike, style_drift
+    severity: str               # critical, warning, info
+    value: float                # actual measured value
+    threshold: float            # threshold that was exceeded
+    message: str                # Chinese description
+
+
+@dataclass
+class AnomalyConfig:
+    """Configurable thresholds for anomaly detection."""
+    pe_percentile: float = 90.0
+    rsi_overbought: float = 70.0
+    outflow_consecutive_days: int = 5
+    foreign_sell_consecutive_days: int = 5
+    concentration_threshold: float = 0.40
+    style_drift_threshold: float = 0.15
