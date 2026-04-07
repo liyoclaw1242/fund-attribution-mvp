@@ -172,3 +172,25 @@ class AnomalyConfig:
     foreign_sell_consecutive_days: int = 5
     concentration_threshold: float = 0.40
     style_drift_threshold: float = 0.15
+
+
+# --- 8.10 Crisis Response (v2.0) ---
+
+@dataclass
+class CrisisClient:
+    """A client affected by a market crisis."""
+    client_id: str
+    name: str
+    exposure_pct: float         # % of portfolio exposed to dropped sectors
+    estimated_loss: float       # estimated loss in TWD
+    talking_point: str          # personalized reassurance message (Chinese)
+
+
+@dataclass
+class CrisisReport:
+    """Full crisis response report."""
+    trigger_date: str           # ISO date, e.g. "2026-04-07"
+    market_drop_pct: float      # overall market drop (decimal, e.g. -0.035)
+    affected_clients: List[CrisisClient] = field(default_factory=list)
+    historical_comparisons: List[Dict[str, str]] = field(default_factory=list)
+    talking_points: str = ""    # general reassurance talking points
