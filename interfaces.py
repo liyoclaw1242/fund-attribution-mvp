@@ -44,3 +44,23 @@ class AISummary(TypedDict):
     verification_passed: bool
     fallback_used: bool
     ai_prompt: str          # full prompt for debugging
+
+
+# --- 8.4 Client Portfolio (v2.0) ---
+
+@dataclass
+class Client:
+    client_id: str
+    name: str
+    kyc_risk_level: str = "moderate"
+    created_at: str = ""
+
+
+@dataclass
+class ClientHolding:
+    client_id: str
+    fund_code: str
+    bank_name: str = ""
+    shares: float = 0.0
+    cost_basis: float = 0.0
+    added_at: str = ""

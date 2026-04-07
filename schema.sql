@@ -52,3 +52,26 @@ CREATE TABLE IF NOT EXISTS report_log (
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
     pdf_path     TEXT
 );
+
+-- v2.0: Multi-client portfolio tables
+
+CREATE TABLE IF NOT EXISTS clients (
+    client_id      TEXT PRIMARY KEY,
+    name           TEXT NOT NULL,
+    kyc_risk_level TEXT DEFAULT 'moderate',
+    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS client_portfolios (
+    client_id  TEXT NOT NULL,
+    fund_code  TEXT NOT NULL,
+    bank_name  TEXT DEFAULT '',
+    shares     REAL NOT NULL DEFAULT 0,
+    cost_basis REAL NOT NULL DEFAULT 0,
+    added_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (client_id, fund_code, bank_name),
+    FOREIGN KEY (client_id) REFERENCES clients(client_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_portfolios_client ON client_portfolios(client_id);
+CREATE INDEX IF NOT EXISTS idx_portfolios_fund ON client_portfolios(fund_code);
