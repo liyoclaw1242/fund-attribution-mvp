@@ -128,6 +128,27 @@ class GoalSimResult:
     suggestions: List[str] = field(default_factory=list)
 
 
+# --- 8.7 Fund Comparison Output ---
+
+@dataclass
+class FundMetrics:
+    """Metrics for a single fund in a comparison."""
+    fund_code: str
+    total_return: float
+    sharpe_ratio: Optional[float]
+    max_drawdown: Optional[float]
+    sector_weights: Dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
+class FundComparison:
+    """Side-by-side comparison of 2-4 funds."""
+    funds: List[FundMetrics]
+    attribution_results: Dict[str, dict] = field(default_factory=dict)
+    attribution_diffs: Dict[str, dict] = field(default_factory=dict)
+    ai_explanation: str = ""
+
+
 # --- 8.8 Portfolio Health Check (v2.0) ---
 
 @dataclass
