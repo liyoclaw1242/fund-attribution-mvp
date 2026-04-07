@@ -75,3 +75,20 @@ CREATE TABLE IF NOT EXISTS client_portfolios (
 
 CREATE INDEX IF NOT EXISTS idx_portfolios_client ON client_portfolios(client_id);
 CREATE INDEX IF NOT EXISTS idx_portfolios_fund ON client_portfolios(fund_code);
+
+-- v2.0: Goal tracking
+
+CREATE TABLE IF NOT EXISTS client_goals (
+    goal_id     TEXT PRIMARY KEY,
+    client_id   TEXT NOT NULL,
+    goal_type   TEXT NOT NULL DEFAULT 'retirement',  -- retirement, house, education
+    target_amount REAL NOT NULL,
+    target_year INTEGER NOT NULL,
+    monthly_contribution REAL NOT NULL DEFAULT 0,
+    risk_tolerance TEXT NOT NULL DEFAULT 'moderate',  -- conservative, moderate, aggressive
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (client_id) REFERENCES clients(client_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_goals_client ON client_goals(client_id);
