@@ -161,3 +161,14 @@ CREATE TABLE IF NOT EXISTS us_stock_cache (
     fetched_at  TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (ticker, date)
 );
+
+-- v2.0: Offshore fund data cache
+
+CREATE TABLE IF NOT EXISTS offshore_fund_cache (
+    fund_id    TEXT NOT NULL,
+    data_type  TEXT NOT NULL,       -- 'nav', 'allocation_sector', 'allocation_region', 'search'
+    period     TEXT DEFAULT '',
+    data_json  TEXT NOT NULL,
+    fetched_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (fund_id, data_type, period)
+);
