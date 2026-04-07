@@ -148,3 +148,16 @@ CREATE TABLE IF NOT EXISTS fx_rate_cache (
     fetched_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (pair, date)
 );
+
+-- v2.0: US stock cache
+
+CREATE TABLE IF NOT EXISTS us_stock_cache (
+    ticker      TEXT NOT NULL,
+    date        TEXT NOT NULL,
+    close_price REAL,
+    return_rate REAL,
+    sector      TEXT,
+    market_cap  INTEGER,
+    fetched_at  TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (ticker, date)
+);
