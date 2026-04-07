@@ -1,0 +1,52 @@
+{
+  "_description": "Static fund TER reference table for MVP. TER as decimal (e.g. 0.015 = 1.5%). Updated manually.",
+  "_updated": "2026-04-07",
+  "funds": {
+    "0050": {"name": "元大台灣50", "ter": 0.0043, "type": "etf"},
+    "0051": {"name": "元大中型100", "ter": 0.0060, "type": "etf"},
+    "0052": {"name": "富邦科技", "ter": 0.0060, "type": "etf"},
+    "0055": {"name": "元大MSCI金融", "ter": 0.0040, "type": "etf"},
+    "0056": {"name": "元大高股息", "ter": 0.0045, "type": "etf"},
+    "006205": {"name": "富邦上証", "ter": 0.0099, "type": "etf"},
+    "006208": {"name": "富邦台50", "ter": 0.0035, "type": "etf"},
+    "00692": {"name": "富邦公司治理", "ter": 0.0035, "type": "etf"},
+    "00850": {"name": "元大臺灣ESG永續", "ter": 0.0040, "type": "etf"},
+    "00878": {"name": "國泰永續高股息", "ter": 0.0046, "type": "etf"},
+    "00919": {"name": "群益台灣精選高息", "ter": 0.0045, "type": "etf"},
+    "NN1001": {"name": "聯博全球高收益債券基金", "ter": 0.0175, "type": "mutual_fund"},
+    "NN1002": {"name": "聯博美國收益基金", "ter": 0.0165, "type": "mutual_fund"},
+    "FL1001": {"name": "富蘭克林坦伯頓成長基金", "ter": 0.0185, "type": "mutual_fund"},
+    "FL1002": {"name": "富蘭克林坦伯頓科技基金", "ter": 0.0190, "type": "mutual_fund"},
+    "JP1001": {"name": "摩根基金-亞洲增長基金", "ter": 0.0175, "type": "mutual_fund"},
+    "SC1001": {"name": "施羅德環球基金-亞洲機遇", "ter": 0.0180, "type": "mutual_fund"},
+    "FI1001": {"name": "富達基金-全球入息基金", "ter": 0.0160, "type": "mutual_fund"},
+    "CT1001": {"name": "安聯收益成長基金", "ter": 0.0170, "type": "mutual_fund"},
+    "PI1001": {"name": "PIMCO全球投資級別債券基金", "ter": 0.0120, "type": "mutual_fund"}
+  },
+  "alternatives": [
+    {
+      "category": "台股大盤",
+      "suggested_fund": "006208",
+      "suggested_name": "富邦台50",
+      "suggested_ter": 0.0035,
+      "replaces_types": ["mutual_fund"],
+      "description": "台股被動追蹤，費用極低"
+    },
+    {
+      "category": "高股息",
+      "suggested_fund": "0056",
+      "suggested_name": "元大高股息",
+      "suggested_ter": 0.0045,
+      "replaces_types": ["mutual_fund"],
+      "description": "高股息策略，低成本替代"
+    },
+    {
+      "category": "全球債券",
+      "suggested_fund": "00687B",
+      "suggested_name": "國泰20年美債",
+      "suggested_ter": 0.0020,
+      "replaces_types": ["mutual_fund"],
+      "description": "債券部位低成本替代"
+    }
+  ]
+}
