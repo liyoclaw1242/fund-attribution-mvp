@@ -66,6 +66,18 @@ class ClientHolding:
     added_at: str = ""
 
 
+# --- 8.7 Weekly LINE Drafts (v2.0) ---
+
+@dataclass
+class LineDraft:
+    """Weekly LINE message draft for a client."""
+    client_id: str
+    client_name: str
+    message: str                # <200 chars Traditional Chinese
+    generated_at: str = ""
+    sent: bool = False
+
+
 # --- 8.5 Fee Transparency (v2.0) ---
 
 @dataclass
@@ -126,6 +138,40 @@ class GoalSimResult:
     years_to_goal: int
     num_paths: int
     suggestions: List[str] = field(default_factory=list)
+
+
+# --- 8.7 Fund Comparison Output ---
+
+@dataclass
+class FundMetrics:
+    """Metrics for a single fund in a comparison."""
+    fund_code: str
+    total_return: float
+    sharpe_ratio: Optional[float]
+    max_drawdown: Optional[float]
+    sector_weights: Dict[str, float] = field(default_factory=dict)
+
+
+@dataclass
+class FundComparison:
+    """Side-by-side comparison of 2-4 funds."""
+    funds: List[FundMetrics]
+    attribution_results: Dict[str, dict] = field(default_factory=dict)
+    attribution_diffs: Dict[str, dict] = field(default_factory=dict)
+    ai_explanation: str = ""
+
+
+# --- 8.7b ETF Benchmark Mirror (v2.0) ---
+
+@dataclass
+class ETFMirrorResult:
+    """Result of comparing client portfolio vs 0050 ETF benchmark."""
+    client_return: float        # client's weighted portfolio return
+    etf_return: float           # 0050 (or proxy) return
+    diff: float                 # client_return - etf_return
+    is_winning: bool            # True if client beats 0050
+    brinson_explanation: str    # Brinson-based explanation (when losing)
+    rebalance_suggestion: str   # AI rebalance suggestion (when losing)
 
 
 # --- 8.8 Portfolio Health Check (v2.0) ---
@@ -193,3 +239,25 @@ class MorningBriefing:
     date: str                   # ISO date
     items: List[BriefingItem] = field(default_factory=list)
     summary: str = ""           # AI-generated executive summary
+
+
+# --- 8.11 Crisis Response (v2.0) ---
+
+@dataclass
+class CrisisClient:
+    """A client affected by a market crisis."""
+    client_id: str
+    name: str
+    exposure_pct: float         # % of portfolio exposed to dropped sectors
+    estimated_loss: float       # estimated loss in TWD
+    talking_point: str          # personalized reassurance message (Chinese)
+
+
+@dataclass
+class CrisisReport:
+    """Full crisis response report."""
+    trigger_date: str           # ISO date, e.g. "2026-04-07"
+    market_drop_pct: float      # overall market drop (decimal, e.g. -0.035)
+    affected_clients: List[CrisisClient] = field(default_factory=list)
+    historical_comparisons: List[Dict[str, str]] = field(default_factory=list)
+    talking_points: str = ""    # general reassurance talking points
