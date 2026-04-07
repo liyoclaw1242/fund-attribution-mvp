@@ -4,7 +4,7 @@ Based on MVP Blueprint v1.1, Section 8.
 """
 
 from dataclasses import dataclass, field
-from typing import TypedDict, List, Optional
+from typing import TypedDict, List, Dict, Optional
 
 import pandas as pd
 
@@ -64,3 +64,39 @@ class ClientHolding:
     shares: float = 0.0
     cost_basis: float = 0.0
     added_at: str = ""
+
+
+# --- 8.5 Fee Transparency (v2.0) ---
+
+@dataclass
+class FundFee:
+    """Fee info for a single fund holding."""
+    fund_code: str
+    fund_name: str
+    ter: float                  # total expense ratio, decimal (e.g. 0.015 = 1.5%)
+    market_value: float         # TWD
+    annual_fee: float           # TWD (market_value * ter)
+
+
+@dataclass
+class Alternative:
+    """Low-cost alternative suggestion."""
+    current_fund: str
+    suggested_fund: str
+    suggested_name: str
+    current_ter: float
+    suggested_ter: float
+    ter_savings: float          # decimal
+    annual_savings: float       # TWD
+    category: str = ""
+
+
+@dataclass
+class FeeReport:
+    """Full fee transparency report for a client."""
+    client_id: str
+    total_market_value: float   # TWD
+    weighted_ter: float         # portfolio-weighted TER
+    total_annual_fee: float     # TWD
+    fund_fees: List[FundFee] = field(default_factory=list)
+    alternatives: List[Alternative] = field(default_factory=list)
