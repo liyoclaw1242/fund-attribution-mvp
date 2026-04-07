@@ -138,3 +138,13 @@ CREATE TABLE IF NOT EXISTS line_drafts (
 
 CREATE INDEX IF NOT EXISTS idx_drafts_client ON line_drafts(client_id);
 CREATE INDEX IF NOT EXISTS idx_drafts_week ON line_drafts(week);
+
+-- v2.0: FX rate cache
+
+CREATE TABLE IF NOT EXISTS fx_rate_cache (
+    pair       TEXT NOT NULL,       -- "USDTWD"
+    date       TEXT NOT NULL,       -- "20260407"
+    rate       REAL NOT NULL,
+    fetched_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (pair, date)
+);
