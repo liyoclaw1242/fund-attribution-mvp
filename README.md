@@ -26,10 +26,16 @@ Brinson-Fachler 基金歸因分析系統，專為台灣理財顧問設計。
 cp .env.example .env
 # Edit .env with your ANTHROPIC_API_KEY
 
-# Docker
+# Full stack (app + pipeline + db)
 docker-compose up
 
-# Or local
+# Pipeline only
+docker-compose up db pipeline
+
+# App only (original SQLite mode)
+docker-compose up app
+
+# Or local (app only)
 pip install -r requirements.txt
 streamlit run app.py
 ```
@@ -55,6 +61,14 @@ streamlit run app.py
 │   ├── claude_client.py    # API client + verification
 │   ├── number_verifier.py  # Regex number check
 │   └── fallback_template.py# Rule-based fallback
+├── pipeline/
+│   ├── Dockerfile          # Pipeline container
+│   ├── requirements.txt    # Pipeline dependencies
+│   ├── scheduler.py        # APScheduler orchestrator
+│   ├── config.py           # Environment-based config
+│   ├── db.py               # PostgreSQL pool + helpers
+│   ├── schema.sql          # Pipeline DB schema
+│   └── fetchers/           # Data source fetchers
 ├── report/
 │   ├── waterfall.py        # Waterfall chart
 │   ├── sector_chart.py     # Sector contribution chart

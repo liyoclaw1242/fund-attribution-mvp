@@ -9,3 +9,34 @@ services:
     env_file:
       - .env
     restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: fund_data
+      POSTGRES_USER: pipeline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpass}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pipeline"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  pipeline:
+    build: ./pipeline
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_URL: postgresql://pipeline:${POSTGRES_PASSWORD:-devpass}@db:5432/fund_data
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      FINMIND_API_TOKEN: ${FINMIND_API_TOKEN:-}
+      SCHEDULER_TIMEZONE: Asia/Taipei
+    restart: unless-stopped
+
+volumes:
+  pgdata:
