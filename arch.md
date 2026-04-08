@@ -165,7 +165,7 @@ sequenceDiagram
 ## Product Roadmap Context
 
 ### Current Phase
-**v2.0** — MVP complete (Sprints 0-4), now entering v2.0 Advisor AI features
+**INFRA** — v2.0 features complete, now building dual-architecture infrastructure (Data Pipeline + PostgreSQL)
 
 ### Sprint Plan
 | Sprint | Focus | Issues | Status |
@@ -180,8 +180,11 @@ sequenceDiagram
 | 7 | Health Check + LINE Drafts + v2.0 FE | #38, #40, #45 | 🟡 #38/#40 Done, #45 unblocked → FE |
 | 8 | Goal Tracker + ETF Mirror + Goal FE | #41, #42, #46 | ✅ Done |
 | 9+ | Fee Calculator + Inaction Cost | #43, #44 | 🔵 #44 Ready |
+| INFRA | Data Pipeline 雙端架構 | #80-#89 | 🟡 #84 Ready, #85-#89 Blocked |
 
 ### Recent Decisions
+- 2026-04-08: INFRA-01 (#80) decomposed into 6 tasks: #84 (foundation) → #85 (TW fetchers) + #86 (intl fetchers) + #87 (scheduler) → #88 (Docker) → #89 (QA)
+- 2026-04-08: Dual-architecture: Data Pipeline container (APScheduler + PostgreSQL) separated from Streamlit app (still SQLite until INFRA-03)
 - 2026-04-07: Sprint 6 complete — #36/#39 merged. Unblocked #45 (v2.0 Dashboard FE) + #47 (QA Sprint 5-6)
 - 2026-04-07: Sprint 8 complete — #41/#42/#46 all merged. #37/#40 also merged (Sprint 6-7 partial)
 - 2026-04-07: Design PR #65 superseded FE PR #58 for Goal Tracker — Design-refined version merged
@@ -240,3 +243,6 @@ sequenceDiagram
 | AI Hallucination | Numbers in summary ≠ source | Regex number verification | Auto-switch to fallback | Correct numbers guaranteed |
 | SQLite | DB locked / corrupted | WAL mode + busy_timeout | 5s retry, then fail gracefully | Temporary service interruption |
 | PDF/Chart | CJK font missing | Font path check | Docker image includes fonts-noto-cjk | Broken characters (deploy issue) |
+| PostgreSQL | Connection pool exhausted | health endpoint + pipeline_run | Retry with backoff, pool size tuning | Pipeline jobs delayed |
+| Pipeline Fetcher | Single source API down | pipeline_run status='failed' | Error isolation — other fetchers unaffected | Partial data (acceptable) |
+| APScheduler | Missed job window | misfire_grace_time | Re-run on next cycle | Stale data until next successful run |
