@@ -180,9 +180,16 @@ sequenceDiagram
 | 7 | Health Check + LINE Drafts + v2.0 FE | #38, #40, #45 | 🟡 #38/#40 Done, #45 unblocked → FE |
 | 8 | Goal Tracker + ETF Mirror + Goal FE | #41, #42, #46 | ✅ Done |
 | 9+ | Fee Calculator + Inaction Cost | #43, #44 | 🔵 #44 Ready |
-| INFRA | Data Pipeline 雙端架構 | #80-#89 | 🟡 #84 Ready, #85-#89 Blocked |
+| INFRA-1 | Data Pipeline | #80→#84-#89 | ✅ All merged (98/98 tests) |
+| INFRA-2 | Finnhub 境外基金 | #81→#95-#96 | ✅ All merged |
+| INFRA-3 | Service Layer (FastAPI) | #82→#98-#103 | 🟡 #98 Ready, #99-#103 Blocked |
+| INFRA-4 | Compose + K8s | #83→#104-#106 | 🔵 Blocked on INFRA-3 |
 
 ### Recent Decisions
+- 2026-04-08: INFRA-01 fully complete — all 6 tasks merged, 98/98 pipeline tests pass
+- 2026-04-08: INFRA-02 complete — Finnhub offshore fund fetcher + 50 ISIN registry entries
+- 2026-04-08: INFRA-03 decomposed into 6 tasks: #98 (FastAPI foundation) → #99 (fund+attribution) + #100 (portfolio+goal) → #101 (FE migration) + #102 (Docker) → #103 (QA)
+- 2026-04-08: INFRA-04 decomposed into 3 tasks: #104 (seeding+health) → #105 (compose+nginx+K8s docs) → #106 (full stack QA)
 - 2026-04-08: INFRA-01 (#80) decomposed into 6 tasks: #84 (foundation) → #85 (TW fetchers) + #86 (intl fetchers) + #87 (scheduler) → #88 (Docker) → #89 (QA)
 - 2026-04-08: Dual-architecture: Data Pipeline container (APScheduler + PostgreSQL) separated from Streamlit app (still SQLite until INFRA-03)
 - 2026-04-07: Sprint 6 complete — #36/#39 merged. Unblocked #45 (v2.0 Dashboard FE) + #47 (QA Sprint 5-6)
