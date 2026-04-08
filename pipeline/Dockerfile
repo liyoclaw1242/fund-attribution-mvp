@@ -10,5 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy pipeline source into /app/pipeline/ so "from pipeline.x" imports work
 COPY . ./pipeline/
 
-HEALTHCHECK --interval=30s --timeout=5s CMD curl -f http://localhost:8080/ || exit 1
+HEALTHCHECK --interval=30s --timeout=5s CMD curl -f http://localhost:8080/health || exit 1
 CMD ["python", "-m", "pipeline.scheduler"]
