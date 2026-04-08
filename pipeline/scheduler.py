@@ -36,7 +36,7 @@ SCHEDULE_REGISTRY: list[dict] = [
     {"name": "finmind_stock_info",  "cron": "0 2 * * 1",         "module": "pipeline.fetchers.finmind", "class": "FinMindStockInfoFetcher"},
     {"name": "sitca_holdings",      "cron": "0 9 20 * *",        "module": "pipeline.fetchers.sitca",   "class": "SitcaFetcher"},
     # International fetchers (#86)
-    {"name": "finnhub_fund_holdings", "cron": "0 6 * * 6",       "module": "pipeline.fetchers.finnhub", "class": "FinnhubFetcher"},
+    {"name": "finnhub_fund_holdings", "cron": "0 6 * * 6",       "module": "pipeline.fetchers.finnhub_", "class": "FinnhubFundFetcher"},
     {"name": "yfinance_us_stocks",    "cron": "0 6 * * 1-5",     "module": "pipeline.fetchers.yfinance_", "class": "YfinanceFetcher"},
     {"name": "fx_rates",              "cron": "0 9 * * 1-5",     "module": "pipeline.fetchers.fx",      "class": "FxRateFetcher"},
     # Transformers
