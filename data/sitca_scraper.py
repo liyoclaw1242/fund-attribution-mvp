@@ -20,7 +20,11 @@ from typing import List, Optional
 
 import pandas as pd
 import requests
+import urllib3
 from bs4 import BeautifulSoup
+
+# SITCA SSL cert missing Subject Key Identifier — suppress warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +175,7 @@ def _rate_limit():
 def _get_viewstate(session: requests.Session, url: str) -> dict:
     """GET the page and extract ASP.NET hidden fields."""
     _rate_limit()
-    resp = session.get(url, timeout=15)
+    resp = session.get(url, timeout=15, verify=False)
     resp.raise_for_status()
 
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -201,22 +205,21 @@ def _scrape_holdings(
         raise ValueError("Failed to obtain SITCA ViewState")
 
     # 2. POST with company code and period
-    year = period[:4]
-    month = period[4:6]
-
     form_data = {
         **fields,
-        "__EVENTTARGET": "ctl00$ContentPlaceHolder1$btnQuery",
+        "__EVENTTARGET": "",
         "__EVENTARGUMENT": "",
-        "ctl00$ContentPlaceHolder1$ddlCompany": company_code,
-        "ctl00$ContentPlaceHolder1$ddlYear": year,
-        "ctl00$ContentPlaceHolder1$ddlMonth": month,
+        "ctl00$ContentPlaceHolder1$ddlQ_YM": period,
+        "ctl00$ContentPlaceHolder1$rdo1": "rbComid",
+        "ctl00$ContentPlaceHolder1$ddlQ_Comid": company_code,
+        "ctl00$ContentPlaceHolder1$ddlQ_Class": fund_type or "",
+        "ctl00$ContentPlaceHolder1$ddlQ_Comid1": company_code,
+        "ctl00$ContentPlaceHolder1$ddlQ_Class1": "",
+        "ctl00$ContentPlaceHolder1$BtnQuery": "查詢",
     }
-    if fund_type:
-        form_data["ctl00$ContentPlaceHolder1$ddlFundType"] = fund_type
 
     _rate_limit()
-    resp = session.post(HOLDINGS_URL, data=form_data, timeout=30)
+    resp = session.post(HOLDINGS_URL, data=form_data, timeout=30, verify=False)
     resp.raise_for_status()
 
     # 3. Parse HTML table
@@ -224,36 +227,82 @@ def _scrape_holdings(
 
 
 def _parse_holdings_html(html: str) -> pd.DataFrame:
-    """Parse fund holdings from SITCA HTML response."""
+    """Parse fund holdings from SITCA IN2629 HTML response.
+
+    SITCA renders all data cells in a single <tr>. Fund name cells use
+    rowspan to span multiple holdings. The layout per holding is 9 cells:
+      名次 | 標的種類 | 標的代號 | 標的名稱 | 金額 | 擔保機構 | 次順位債券 | 受益權單位數 | 占比(%)
+
+    Fund name cells (with rowspan) appear before each fund's first holding.
+    "合計" summary cells appear after each fund's holdings.
+    """
     soup = BeautifulSoup(html, "html.parser")
 
-    # Find the main data table
-    tables = soup.find_all("table", class_=re.compile("grid|data|table", re.I))
-    if not tables:
-        # Try pandas.read_html as fallback parser
+    cells = soup.find_all("td", class_=re.compile(r"DT(odd|even)"))
+    if not cells:
+        raise ValueError("No data cells (DTodd/DTeven) found in SITCA response")
+
+    HOLDING_COLS = 9  # cells per holding (excluding fund_name)
+
+    records = []
+    current_fund = ""
+    i = 0
+
+    while i < len(cells):
+        cell = cells[i]
+        text = cell.get_text(strip=True)
+        rowspan = int(cell.get("rowspan", "1"))
+
+        # Fund name cell has rowspan > 1
+        if rowspan > 1:
+            current_fund = text
+            i += 1
+            continue
+
+        # "合計" summary row — 2 cells: label + percentage
+        if text == "合計":
+            i += 2  # skip "合計" + its percentage
+            continue
+
+        # Regular holding row: 9 cells
+        if i + HOLDING_COLS > len(cells):
+            break
+
+        row_texts = [cells[i + j].get_text(strip=True) for j in range(HOLDING_COLS)]
+        rank_str = row_texts[0]
+        asset_type = row_texts[1]
+        stock_code = row_texts[2]
+        stock_name = row_texts[3]
+        weight_str = row_texts[8]  # 占比(%)
+
+        i += HOLDING_COLS
+
+        # Validate rank
+        if not rank_str.isdigit():
+            continue
+
+        # Parse weight
         try:
-            dfs = pd.read_html(io.StringIO(html))
-            if dfs:
-                return _normalize_holdings_df(dfs[0])
-        except Exception:
-            pass
-        raise ValueError("No data table found in SITCA response")
+            weight = float(weight_str.replace(",", "")) / 100.0
+        except (ValueError, AttributeError):
+            continue
 
-    # Parse the first matching table
-    rows = []
-    for table in tables:
-        trs = table.find_all("tr")
-        for tr in trs:
-            tds = tr.find_all(["td", "th"])
-            if len(tds) >= 2:
-                cells = [td.get_text(strip=True) for td in tds]
-                rows.append(cells)
+        if weight <= 0:
+            continue
 
-    if len(rows) < 2:
-        raise ValueError("SITCA table has no data rows")
+        records.append({
+            "fund_name": current_fund,
+            "industry": stock_name,
+            "weight": weight,
+            "stock_code": stock_code,
+            "asset_type": asset_type,
+            "rank": int(rank_str),
+        })
 
-    df = pd.DataFrame(rows[1:], columns=rows[0] if rows[0] else None)
-    return _normalize_holdings_df(df)
+    if not records:
+        raise ValueError("No holding records parsed from SITCA response")
+
+    return pd.DataFrame(records)
 
 
 def _normalize_holdings_df(df: pd.DataFrame) -> pd.DataFrame:
@@ -312,7 +361,7 @@ def _scrape_returns(company_code: str, period: str) -> pd.DataFrame:
     }
 
     _rate_limit()
-    resp = session.post(RETURNS_URL, data=form_data, timeout=30)
+    resp = session.post(RETURNS_URL, data=form_data, timeout=30, verify=False)
     resp.raise_for_status()
 
     return _parse_returns_html(resp.text)

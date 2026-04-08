@@ -87,10 +87,8 @@ def _load_holdings(uploaded_file, input_method: str, fund_code: str = "") -> pd.
     else:
         if not fund_code.strip():
             raise ValueError("請輸入基金代碼")
-        raise ValueError(
-            f"基金代碼 {fund_code} 查詢功能建置中。\n"
-            "請先使用「上傳 CSV/Excel」模式。"
-        )
+        from data.fund_lookup import lookup_fund
+        return lookup_fund(fund_code.strip())
 
 
 def _format_pct(value: float) -> str:
@@ -214,18 +212,45 @@ def _generate_pdf(
 ) -> bytes | None:
     """Generate PDF report. Returns PDF bytes or None."""
     try:
+        import tempfile
+        from pathlib import Path
         from report.pdf_generator import generate_pdf
-        buf = io.BytesIO()
-        generate_pdf(
+
+        waterfall_path = None
+        sector_path = None
+        tmp_files = []
+
+        # Write PNG bytes to temp files for pdf_generator
+        if waterfall_png:
+            tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            tmp.write(waterfall_png)
+            tmp.close()
+            waterfall_path = tmp.name
+            tmp_files.append(tmp.name)
+
+        if sector_png:
+            tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+            tmp.write(sector_png)
+            tmp.close()
+            sector_path = tmp.name
+            tmp_files.append(tmp.name)
+
+        pdf_path = generate_pdf(
             result,
-            output=buf,
-            waterfall_png=waterfall_png,
-            sector_png=sector_png,
-            ai_summary=ai_summary,
+            summary=ai_summary or {},
             advisor_name=advisor_name,
-            advisor_branch=advisor_branch,
+            waterfall_path=waterfall_path,
+            sector_chart_path=sector_path,
         )
-        return buf.getvalue()
+
+        pdf_bytes = Path(pdf_path).read_bytes()
+
+        # Cleanup temp files
+        import os
+        for f in tmp_files:
+            os.unlink(f)
+
+        return pdf_bytes
     except (NotImplementedError, ImportError):
         return None
 
