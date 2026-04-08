@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from service.config import ServiceConfig
 from service.db import close_engine, init_engine
-from service.routers import health
+from service.routers import goal, health, portfolio
 
 logger = logging.getLogger("service")
 
@@ -52,6 +52,8 @@ def create_app() -> FastAPI:
 
     # Routers
     app.include_router(health.router, prefix="/api")
+    app.include_router(portfolio.router)
+    app.include_router(goal.router)
 
     return app
 
