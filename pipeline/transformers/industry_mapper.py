@@ -39,6 +39,27 @@ GICS_TO_UNIFIED = {
 }
 
 
+# Finnhub sector names → unified Chinese (Finnhub uses different labels than GICS)
+FINNHUB_SECTOR_MAP = {
+    "Technology": "資訊科技",
+    "Financial Services": "金融",
+    "Healthcare": "醫療保健",
+    "Consumer Cyclical": "消費循環",
+    "Industrials": "工業",
+    "Communication Services": "通訊服務",
+    "Consumer Defensive": "消費必需",
+    "Energy": "能源",
+    "Utilities": "公用事業",
+    "Real Estate": "不動產",
+    "Basic Materials": "原物料",
+    "Financial": "金融",
+    "Bonds": "債券",
+    "Cash": "現金",
+    "Other": "其他",
+    "Unknown": "未分類",
+}
+
+
 def load_mapping(path: Path | str | None = None) -> dict[str, str]:
     """Load the SITCA→TSE 28 mapping from JSON.
 
@@ -82,7 +103,13 @@ def map_industry(raw_name: str, source: str = "auto") -> Optional[str]:
 
     raw_name = raw_name.strip()
 
-    # 1. GICS mapping (English sources)
+    # 1a. Finnhub sector mapping
+    if source in ("finnhub", "auto"):
+        finnhub_match = FINNHUB_SECTOR_MAP.get(raw_name)
+        if finnhub_match:
+            return finnhub_match
+
+    # 1b. GICS mapping (English sources)
     if source in ("gics", "auto"):
         gics_match = GICS_TO_UNIFIED.get(raw_name)
         if gics_match:
