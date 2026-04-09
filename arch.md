@@ -182,10 +182,11 @@ sequenceDiagram
 | 9+ | Fee Calculator + Inaction Cost | #43, #44 | 🔵 #44 Ready |
 | INFRA-1 | Data Pipeline | #80→#84-#89 | ✅ All merged (98/98 tests) |
 | INFRA-2 | Finnhub 境外基金 | #81→#95-#96 | ✅ All merged |
-| INFRA-3 | Service Layer (FastAPI) | #82→#98-#103 | 🟡 #98 Ready, #99-#103 Blocked |
-| INFRA-4 | Compose + K8s | #83→#104-#106 | 🔵 Blocked on INFRA-3 |
+| INFRA-3 | Service Layer (FastAPI) | #82→#98-#103 | 🟡 #98/#99/#100 Merged, #101/#102 Ready, #103 Blocked |
+| INFRA-4 | Compose + K8s | #83→#104-#106 | 🔵 #104/#105 Blocked on #102, #106 Blocked on #105 |
 
 ### Recent Decisions
+- 2026-04-09: #99 (Fund+Attribution API) merged — resolved service/main.py conflict (combined all routers). Unblocked #101 (FE migration) + #102 (Docker)
 - 2026-04-08: INFRA-01 fully complete — all 6 tasks merged, 98/98 pipeline tests pass
 - 2026-04-08: INFRA-02 complete — Finnhub offshore fund fetcher + 50 ISIN registry entries
 - 2026-04-08: INFRA-03 decomposed into 6 tasks: #98 (FastAPI foundation) → #99 (fund+attribution) + #100 (portfolio+goal) → #101 (FE migration) + #102 (Docker) → #103 (QA)
