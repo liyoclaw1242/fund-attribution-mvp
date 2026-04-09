@@ -165,9 +165,12 @@ def _show_kpi_cards(result: dict):
 def _render_waterfall(result: dict) -> bytes | None:
     """Render waterfall chart. Returns PNG bytes or None if unavailable."""
     try:
-        from report.waterfall import render_waterfall
+        from report.waterfall import generate_waterfall
+        fig = generate_waterfall(result)
         buf = io.BytesIO()
-        render_waterfall(result, buf)
+        fig.savefig(buf, format="png", bbox_inches="tight")
+        import matplotlib.pyplot as plt
+        plt.close(fig)
         return buf.getvalue()
     except (NotImplementedError, ImportError):
         return None
@@ -176,9 +179,12 @@ def _render_waterfall(result: dict) -> bytes | None:
 def _render_sector_chart(result: dict) -> bytes | None:
     """Render sector contribution chart. Returns PNG bytes or None."""
     try:
-        from report.sector_chart import render_sector_chart
+        from report.sector_chart import generate_sector_chart
+        fig = generate_sector_chart(result)
         buf = io.BytesIO()
-        render_sector_chart(result, buf)
+        fig.savefig(buf, format="png", bbox_inches="tight")
+        import matplotlib.pyplot as plt
+        plt.close(fig)
         return buf.getvalue()
     except (NotImplementedError, ImportError):
         return None
