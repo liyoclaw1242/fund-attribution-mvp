@@ -61,34 +61,43 @@ def _parse_mode(label: str) -> str:
     return "BF3" if "BF3" in label else "BF2"
 
 
-def _load_holdings(uploaded_file, input_method: str, fund_code: str = "") -> pd.DataFrame:
-    """Load holdings DataFrame from uploaded file or fund code.
+def _parse_csv_holdings(uploaded_file) -> pd.DataFrame:
+    """Parse holdings DataFrame from uploaded CSV/Excel file.
 
     Returns DataFrame with columns [industry, Wp, Wb, Rp, Rb].
     """
-    if input_method == "上傳 CSV/Excel":
-        if uploaded_file is None:
-            raise ValueError("請先上傳持股資料檔案")
+    if uploaded_file is None:
+        raise ValueError("請先上傳持股資料檔案")
 
-        if uploaded_file.name.endswith(".csv"):
-            df = pd.read_csv(uploaded_file)
-        else:
-            df = pd.read_excel(uploaded_file)
-
-        required = ["industry", "Wp", "Wb", "Rp", "Rb"]
-        if all(c in df.columns for c in required):
-            return df[required]
-
-        raise ValueError(
-            "上傳的檔案缺少基準資料（Wb, Rb 欄位）。\n"
-            "請使用包含 industry, Wp, Wb, Rp, Rb 欄位的完整資料集，"
-            "或改用「輸入基金代碼」模式自動取得基準。"
-        )
+    if uploaded_file.name.endswith(".csv"):
+        df = pd.read_csv(uploaded_file)
     else:
-        if not fund_code.strip():
-            raise ValueError("請輸入基金代碼")
-        from data.fund_lookup import lookup_fund
-        return lookup_fund(fund_code.strip())
+        df = pd.read_excel(uploaded_file)
+
+    required = ["industry", "Wp", "Wb", "Rp", "Rb"]
+    if all(c in df.columns for c in required):
+        return df[required]
+
+    raise ValueError(
+        "上傳的檔案缺少基準資料（Wb, Rb 欄位）。\n"
+        "請使用包含 industry, Wp, Wb, Rp, Rb 欄位的完整資料集，"
+        "或改用「輸入基金代碼」模式自動取得基準。"
+    )
+
+
+def _api_result_to_engine_format(api_result: dict) -> dict:
+    """Convert API attribution response to engine result format.
+
+    The API returns detail/top/bottom as list[dict]; charts and AI
+    expect them as DataFrames.
+    """
+    result = dict(api_result)
+    result["detail"] = pd.DataFrame(api_result.get("detail", []))
+    result["top_contributors"] = pd.DataFrame(api_result.get("top_contributors", []))
+    result["bottom_contributors"] = pd.DataFrame(api_result.get("bottom_contributors", []))
+    result["unmapped_weight"] = api_result.get("unmapped_weight", 0.0)
+    result["unmapped_industries"] = api_result.get("unmapped_industries", [])
+    return result
 
 
 def _format_pct(value: float) -> str:
@@ -293,38 +302,66 @@ if run:
     pdf_bytes = None
 
     with st.status("分析進行中...", expanded=True) as status:
-        # Step 1: Load data
-        st.write("📂 讀取持股資料...")
-        try:
-            fund_code_val = fund_code if input_method == "輸入基金代碼" else ""
-            uploaded = uploaded_file if input_method == "上傳 CSV/Excel" else None
-            holdings = _load_holdings(uploaded, input_method, fund_code_val)
-        except ValueError as e:
-            st.error(str(e))
-            status.update(label="分析失敗", state="error")
-            st.stop()
+        # Step 1 & 2: Load data + Run attribution
+        if input_method == "輸入基金代碼":
+            # Fund code mode: use FastAPI service for lookup + attribution
+            if not fund_code.strip():
+                st.error("請輸入基金代碼")
+                status.update(label="分析失敗", state="error")
+                st.stop()
 
-        st.write(f"✅ 讀取完成 — {len(holdings)} 筆產業資料")
+            st.write("📂 透過 API 查詢基金資料...")
+            try:
+                from utils.api_client import run_attribution as api_attribution, APIError, APIUnavailableError
 
-        # Step 2: Run attribution
-        st.write(f"🔢 執行 {mode} 歸因計算...")
-        try:
-            from engine.brinson import compute_attribution
+                st.write(f"🔢 執行 {mode} 歸因計算...")
+                api_result = api_attribution(
+                    holdings=[{"identifier": fund_code.strip(), "shares": 1}],
+                    mode=mode,
+                )
+                result = _api_result_to_engine_format(api_result)
+                holdings = result["detail"]
+            except APIUnavailableError as e:
+                st.error(f"❌ {e}")
+                status.update(label="API 服務無法連線", state="error")
+                st.stop()
+            except APIError as e:
+                st.error(f"歸因計算失敗: {e}")
+                status.update(label="分析失敗", state="error")
+                st.stop()
 
-            result = compute_attribution(holdings, mode=mode)
-        except NotImplementedError:
-            st.error(
-                "⚠️ Brinson 歸因引擎尚未實作（Issue #7）。\n\n"
-                "引擎完成後，此儀表板將自動顯示分析結果。"
-            )
-            status.update(label="引擎尚未就緒", state="error")
-            st.stop()
-        except (ValueError, AssertionError) as e:
-            st.error(f"歸因計算失敗: {e}")
-            status.update(label="分析失敗", state="error")
-            st.stop()
+            st.write(f"✅ 歸因計算完成 — {len(result['detail'])} 筆產業資料")
+        else:
+            # CSV upload mode: parse locally, compute attribution locally
+            st.write("📂 讀取持股資料...")
+            try:
+                holdings = _parse_csv_holdings(
+                    uploaded_file if input_method == "上傳 CSV/Excel" else None
+                )
+            except ValueError as e:
+                st.error(str(e))
+                status.update(label="分析失敗", state="error")
+                st.stop()
 
-        st.write("✅ 歸因計算完成")
+            st.write(f"✅ 讀取完成 — {len(holdings)} 筆產業資料")
+
+            st.write(f"🔢 執行 {mode} 歸因計算...")
+            try:
+                from engine.brinson import compute_attribution
+                result = compute_attribution(holdings, mode=mode)
+            except NotImplementedError:
+                st.error(
+                    "⚠️ Brinson 歸因引擎尚未實作（Issue #7）。\n\n"
+                    "引擎完成後，此儀表板將自動顯示分析結果。"
+                )
+                status.update(label="引擎尚未就緒", state="error")
+                st.stop()
+            except (ValueError, AssertionError) as e:
+                st.error(f"歸因計算失敗: {e}")
+                status.update(label="分析失敗", state="error")
+                st.stop()
+
+            st.write("✅ 歸因計算完成")
 
         # Step 3: Validate
         st.write("🔍 驗證結果...")

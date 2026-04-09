@@ -174,53 +174,37 @@ def _delete_goal(goal_id: str) -> None:
     st.session_state.goals = [g for g in st.session_state.goals if g["goal_id"] != goal_id]
 
 
-# --- DB persistence helpers ---
-def _save_goal_to_db(goal: dict) -> None:
-    """Persist goal to SQLite. No-op if DB unavailable."""
+# --- API persistence helpers ---
+def _save_goal_to_api(goal: dict) -> None:
+    """Persist goal via FastAPI. No-op if API unavailable."""
     try:
-        from data.cache import get_connection
-        conn = get_connection()
-        conn.execute(
-            """INSERT OR REPLACE INTO client_goals
-               (goal_id, client_id, goal_type, target_amount, target_year,
-                monthly_contribution, risk_tolerance, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))""",
-            (
-                goal["goal_id"],
-                goal.get("client_id", "default"),
-                goal["goal_type"],
-                goal["target_amount"],
-                goal["target_year"],
-                goal["monthly_contribution"],
-                goal["risk_tolerance"],
-            ),
+        from utils.api_client import create_goal
+        create_goal(
+            client_id=goal.get("client_id", "default"),
+            goal_type=goal["goal_type"],
+            target_amount=goal["target_amount"],
+            target_year=goal["target_year"],
+            monthly_contribution=goal["monthly_contribution"],
+            risk_tolerance=goal["risk_tolerance"],
         )
-        conn.commit()
-        conn.close()
     except Exception:
-        pass  # DB not yet initialized — session state is primary
+        pass  # API not available — session state is primary
 
 
-def _load_goals_from_db() -> list[dict]:
-    """Load goals from SQLite. Returns empty list if unavailable."""
+def _load_goals_from_api() -> list[dict]:
+    """Load goals via FastAPI. Returns empty list if unavailable."""
     try:
-        from data.cache import get_connection
-        conn = get_connection()
-        rows = conn.execute(
-            "SELECT * FROM client_goals WHERE client_id = ? ORDER BY created_at DESC",
-            ("default",),
-        ).fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
+        from utils.api_client import list_goals
+        return list_goals("default")
     except Exception:
         return []
 
 
-# Load from DB on first run
+# Load from API on first run
 if "goals_loaded" not in st.session_state:
-    db_goals = _load_goals_from_db()
-    if db_goals:
-        st.session_state.goals = db_goals
+    api_goals = _load_goals_from_api()
+    if api_goals:
+        st.session_state.goals = api_goals
     st.session_state.goals_loaded = True
 
 
@@ -439,7 +423,7 @@ if "last_result" in st.session_state:
                     "probability": prob,
                 }
                 _save_goal(goal)
-                _save_goal_to_db(goal)
+                _save_goal_to_api(goal)
                 st.success("目標已儲存！")
                 st.rerun()
 
