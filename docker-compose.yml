@@ -8,6 +8,24 @@ services:
       - ./output:/app/output
     env_file:
       - .env
+    environment:
+      API_BASE: http://service:8000
+    depends_on:
+      - service
+    restart: unless-stopped
+
+  service:
+    build:
+      context: .
+      dockerfile: service/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_URL: postgresql+asyncpg://pipeline:${POSTGRES_PASSWORD:-devpass}@db:5432/fund_data
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "8000:8000"
     restart: unless-stopped
 
   db:
