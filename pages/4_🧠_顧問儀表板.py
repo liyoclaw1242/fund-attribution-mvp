@@ -16,14 +16,15 @@ st.title("🧠 顧問儀表板 v2.0")
 st.caption("Advisor Dashboard — 每日晨報、異常偵測、恐慌應對、基金比較、健康檢查")
 
 
-# --- DB connection helper ---
-def _get_conn():
-    """Get SQLite connection. Returns None if unavailable."""
+# --- API client helper ---
+def _api_available() -> bool:
+    """Check if the FastAPI service is reachable."""
     try:
-        from data.cache import get_connection
-        return get_connection()
+        from utils.api_client import check_health
+        check_health()
+        return True
     except Exception:
-        return None
+        return False
 
 
 # --- Severity badge ---
@@ -66,19 +67,12 @@ with tab_briefing:
     st.caption("Morning Briefing — 今日重點警示與建議話術")
 
     def _load_briefing():
-        """Load or generate morning briefing."""
-        try:
-            from ai.morning_briefing import generate_briefing
-            conn = _get_conn()
-            if conn is None:
-                return None
-            briefing = generate_briefing(conn, generate_ai=False, top_n=3)
-            conn.close()
-            return briefing
-        except (ImportError, NotImplementedError):
-            return None
-        except Exception:
-            return None
+        """Load or generate morning briefing via API.
+
+        Note: No dedicated briefing API endpoint yet — returns None
+        to show the fallback "module building" message.
+        """
+        return None
 
     briefing = _load_briefing()
 
@@ -126,19 +120,12 @@ with tab_anomaly:
     st.caption("Anomaly Alerts — 客戶持股異常訊號監控")
 
     def _load_alerts():
-        """Scan all clients for anomalies."""
-        try:
-            from engine.anomaly_detector import scan_all_clients
-            conn = _get_conn()
-            if conn is None:
-                return None
-            alerts = scan_all_clients(conn, store_alerts=False)
-            conn.close()
-            return alerts
-        except (ImportError, NotImplementedError):
-            return None
-        except Exception:
-            return None
+        """Scan all clients for anomalies via API.
+
+        Note: No dedicated anomaly API endpoint yet — returns None
+        to show the fallback "module building" message.
+        """
+        return None
 
     alerts = _load_alerts()
 
@@ -213,16 +200,8 @@ with tab_anomaly:
                         f"✅ 確認 {a.client_id}/{a.fund_code}",
                         key=f"ack_{a.client_id}_{a.fund_code}_{a.signal_type}",
                     ):
-                        try:
-                            from engine.anomaly_detector import acknowledge_alert
-                            conn = _get_conn()
-                            if conn:
-                                acknowledge_alert(conn, f"{a.client_id}_{a.fund_code}_{a.signal_type}")
-                                conn.close()
-                                st.success(f"已確認 {a.client_id}/{a.fund_code}")
-                                st.rerun()
-                        except Exception:
-                            st.warning("確認功能尚未完全就緒")
+                        # Acknowledge API endpoint not yet available
+                        st.warning("確認功能尚未完全就緒")
 
 
 # ===================================================================
@@ -234,23 +213,12 @@ with tab_crisis:
     st.caption("Crisis Response — 市場大跌時的客戶安撫機制")
 
     def _check_crisis():
-        """Check for crisis trigger and generate response."""
-        try:
-            from engine.crisis_response import check_crisis_trigger, generate_crisis_response
-            conn = _get_conn()
-            if conn is None:
-                return None, None
-            is_crisis, drop_pct, _ = check_crisis_trigger(conn)
-            if is_crisis:
-                report = generate_crisis_response(conn, generate_ai=False)
-                conn.close()
-                return True, report
-            conn.close()
-            return False, None
-        except (ImportError, NotImplementedError):
-            return None, None
-        except Exception:
-            return None, None
+        """Check for crisis trigger via API.
+
+        Note: No dedicated crisis API endpoint yet — returns None
+        to show the fallback "module building" message.
+        """
+        return None, None
 
     crisis_status, crisis_report = _check_crisis()
 
@@ -486,16 +454,10 @@ with tab_health:
 
     # Client selector
     def _load_clients():
-        """Load client list from DB."""
+        """Load client list via FastAPI."""
         try:
-            conn = _get_conn()
-            if conn is None:
-                return []
-            rows = conn.execute(
-                "SELECT client_id, name FROM clients ORDER BY name"
-            ).fetchall()
-            conn.close()
-            return [dict(r) for r in rows]
+            from utils.api_client import list_clients
+            return list_clients()
         except Exception:
             return []
 
@@ -527,84 +489,45 @@ with tab_health:
     if check_btn and selected_client_id:
         with st.spinner("健康檢查中..."):
             try:
-                from engine.health_check import check_portfolio_health
-                conn = _get_conn()
-                if conn is None:
-                    st.error("資料庫連線失敗")
-                    st.stop()
-                result = check_portfolio_health(selected_client_id, conn)
-                conn.close()
+                from utils.api_client import get_portfolio, APIUnavailableError
+                portfolio = get_portfolio(selected_client_id)
 
                 # Header
                 st.markdown(f"### {selected_client_name} 的投資組合")
 
-                # Cross-bank aggregation
-                if result.bank_breakdown:
-                    st.subheader("🏦 跨行持股彙整")
+                # Cross-bank aggregation from API portfolio data
+                holdings = portfolio.get("holdings", [])
+                if holdings:
                     import pandas as pd
-                    bank_data = [
-                        {"銀行": bank, "市值 (TWD)": f"${value:,.0f}"}
-                        for bank, value in result.bank_breakdown.items()
-                    ]
-                    st.dataframe(
-                        pd.DataFrame(bank_data),
-                        use_container_width=True,
-                        hide_index=True,
-                    )
-                    st.metric("總資產", f"${result.total_value:,.0f}")
+                    bank_breakdown = {}
+                    for h in holdings:
+                        bank = h.get("bank_name", "未知")
+                        value = h.get("shares", 0) * h.get("cost_basis", 0)
+                        bank_breakdown[bank] = bank_breakdown.get(bank, 0) + value
 
-                # Issues
-                if result.issues:
-                    st.subheader("⚠️ 發現問題")
-                    for issue in result.issues:
-                        severity_color = SEVERITY_COLORS.get(issue.severity, "#888")
-                        st.markdown(
-                            f"""
-                            <div style="
-                                padding: 12px 16px;
-                                border-radius: 8px;
-                                border-left: 4px solid {severity_color};
-                                background: {severity_color}10;
-                                margin-bottom: 8px;
-                            ">
-                                <div style="display:flex;align-items:center;gap:8px;">
-                                    {_severity_badge(issue.severity)}
-                                    <span style="font-weight:600;">{issue.check_type}</span>
-                                </div>
-                                <div style="margin-top:6px;color:#333;">{issue.description}</div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True,
+                    if bank_breakdown:
+                        st.subheader("🏦 跨行持股彙整")
+                        bank_data = [
+                            {"銀行": bank, "市值 (TWD)": f"${value:,.0f}"}
+                            for bank, value in bank_breakdown.items()
+                        ]
+                        st.dataframe(
+                            pd.DataFrame(bank_data),
+                            use_container_width=True,
+                            hide_index=True,
                         )
+                        total_value = sum(bank_breakdown.values())
+                        st.metric("總資產", f"${total_value:,.0f}")
 
-                    # Suggestion cards
-                    st.subheader("💡 改善建議")
-                    suggestion_cols = st.columns(min(len(result.issues), 3))
-                    for i, issue in enumerate(result.issues[:3]):
-                        with suggestion_cols[i]:
-                            st.markdown(
-                                f"""
-                                <div style="
-                                    padding: 16px;
-                                    border-radius: 12px;
-                                    border: 1px solid #e5e5e5;
-                                    background: #fafafa;
-                                    height: 100%;
-                                ">
-                                    <div style="font-weight:600;margin-bottom:8px;">
-                                        {issue.check_type}
-                                    </div>
-                                    <div style="font-size:13px;color:#666;">
-                                        {issue.suggestion}
-                                    </div>
-                                </div>
-                                """,
-                                unsafe_allow_html=True,
-                            )
+                    st.info(
+                        "🩺 進階健康檢查（風險診斷、集中度分析）建置中 — "
+                        "後端 API 完成後將自動啟用。",
+                        icon="🔧",
+                    )
                 else:
-                    st.success("✅ 投資組合健康 — 未發現重大問題。")
+                    st.info("此客戶目前無持股資料。")
 
-            except (ImportError, NotImplementedError):
+            except ImportError:
                 st.info(
                     "🩺 健康檢查模組建置中 — 後端完成後將自動啟用。",
                     icon="🔧",
