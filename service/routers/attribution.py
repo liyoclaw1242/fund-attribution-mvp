@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api", tags=["attribution"])
 async def compute_attribution(req: AttributionRequest):
     """Run Brinson-Fachler attribution on provided holdings."""
     try:
-        result = run_attribution(
+        result = await run_attribution(
             holdings_input=[h.model_dump() for h in req.holdings],
             mode=req.mode,
             benchmark=req.benchmark,

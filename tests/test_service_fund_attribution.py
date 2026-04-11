@@ -1,7 +1,12 @@
-"""Tests for fund lookup, search, and attribution API endpoints."""
+"""Tests for fund lookup, search, and attribution API endpoints.
 
-import sqlite3
-from unittest.mock import patch
+The service layer now talks to Postgres via async SQLAlchemy. These
+tests replace `service.services.fund_service.get_engine` with a fake
+engine driven by a queue of canned rows — no real DB required.
+"""
+
+from datetime import date
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -10,7 +15,7 @@ from service.main import create_app
 from service.services.fund_service import detect_identifier_type
 
 
-# --- Identifier detection ---
+# --- Identifier detection ---------------------------------------------------
 
 class TestIdentifierDetection:
     def test_tw_etf(self):
@@ -29,120 +34,157 @@ class TestIdentifierDetection:
         assert detect_identifier_type("something weird 123") == "unknown"
 
 
-# --- Fund endpoints ---
+# --- Fake engine helper -----------------------------------------------------
+
+class _FakeResult:
+    """Minimal stand-in for a SQLAlchemy Result object."""
+
+    def __init__(self, rows):
+        self._rows = list(rows)
+
+    def first(self):
+        return self._rows[0] if self._rows else None
+
+    def all(self):
+        return list(self._rows)
+
+
+def _fake_engine(response_queue):
+    """Build a mock async engine whose connect().execute() pops from a queue.
+
+    Each queue entry is a list (possibly empty) of row tuples. The order of
+    entries must match the order of SQL statements the code under test runs.
+    """
+
+    async def fake_execute(*_args, **_kwargs):
+        rows = response_queue.pop(0) if response_queue else []
+        return _FakeResult(rows)
+
+    mock_conn = MagicMock()
+    mock_conn.execute = AsyncMock(side_effect=fake_execute)
+
+    mock_engine = MagicMock()
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=mock_conn)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    mock_engine.connect.return_value = cm
+    return mock_engine
+
 
 @pytest.fixture
-def test_db(tmp_path):
-    """Create a test SQLite DB with fund data."""
-    db_path = str(tmp_path / "test.db")
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("""
-        CREATE TABLE fund_holdings (
-            fund_code TEXT NOT NULL,
-            period TEXT NOT NULL,
-            industry TEXT NOT NULL,
-            weight REAL NOT NULL,
-            return_rate REAL,
-            source TEXT DEFAULT 'sitca',
-            fetched_at TEXT DEFAULT (datetime('now')),
-            expires_at TEXT DEFAULT (datetime('now', '+1 day')),
-            PRIMARY KEY (fund_code, period, industry)
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE benchmark_index (
-            index_name TEXT NOT NULL,
-            period TEXT NOT NULL,
-            industry TEXT NOT NULL,
-            weight REAL NOT NULL,
-            return_rate REAL NOT NULL,
-            fetched_at TEXT DEFAULT (datetime('now')),
-            expires_at TEXT DEFAULT (datetime('now', '+1 day')),
-            PRIMARY KEY (index_name, period, industry)
-        )
-    """)
+def canned_fund_db():
+    """Patch fund_service.get_engine with a scripted fake engine.
 
-    # Seed fund data (weights sum to 1.0)
-    conn.executemany(
-        "INSERT INTO fund_holdings (fund_code, period, industry, weight, return_rate) VALUES (?, ?, ?, ?, ?)",
-        [
-            ("0050", "latest", "半導體業", 0.50, 0.12),
-            ("0050", "latest", "金融保險業", 0.30, 0.05),
-            ("0050", "latest", "電子零組件業", 0.20, 0.08),
-        ],
-    )
+    Yields a `dict` with a `queue` list the test can populate before each
+    HTTP call to stage responses for the expected SQL statements.
+    """
+    state = {"queue": []}
+    engine = _fake_engine(state["queue"])
+    with patch("service.services.fund_service.get_engine", return_value=engine):
+        yield state
 
-    # Seed benchmark (weights sum to 1.0)
-    conn.executemany(
-        "INSERT INTO benchmark_index (index_name, period, industry, weight, return_rate) VALUES (?, ?, ?, ?, ?)",
-        [
-            ("MI_INDEX", "latest", "半導體業", 0.50, 0.10),
-            ("MI_INDEX", "latest", "金融保險業", 0.30, 0.04),
-            ("MI_INDEX", "latest", "電子零組件業", 0.20, 0.06),
-        ],
-    )
 
-    conn.commit()
-    conn.close()
-
-    with patch("service.services.fund_service._DB_PATH", db_path):
-        yield db_path
+# --- Fund endpoints ---------------------------------------------------------
 
 
 class TestFundEndpoints:
     @pytest.mark.asyncio
-    async def test_get_fund(self, test_db):
+    async def test_get_fund_returns_aggregated_industries(self, canned_fund_db):
+        # 1st call: fund_info lookup; 2nd: holdings aggregated by sector.
+        canned_fund_db["queue"].extend([
+            [("0050", "Yuanta 0050", "tw_etf", "TWD", "tw", "pipeline")],
+            [
+                ("Semiconductor", 0.55, date(2026, 3, 31)),
+                ("Finance", 0.25, date(2026, 3, 31)),
+                ("Electronic Components", 0.20, date(2026, 3, 31)),
+            ],
+        ])
         app = create_app()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/api/fund/0050")
+
         assert resp.status_code == 200
         body = resp.json()
         assert body["fund_id"] == "0050"
+        assert body["fund_name"] == "Yuanta 0050"
         assert len(body["holdings"]) == 3
+        assert body["holdings"][0]["stock_name"] == "Semiconductor"
+        assert body["as_of_date"] == "2026-03-31"
 
     @pytest.mark.asyncio
-    async def test_get_fund_not_found(self, test_db):
+    async def test_get_fund_not_found_returns_404(self, canned_fund_db):
+        # fund_info lookup empty; identifier does not match ISIN pattern so
+        # the registry fallback is skipped.
+        canned_fund_db["queue"].extend([[]])
+
         app = create_app()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/api/fund/9999")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_search_funds(self, test_db):
+    async def test_search_funds_by_fund_id(self, canned_fund_db):
+        canned_fund_db["queue"].extend([[
+            ("0050", "Yuanta 0050", "tw_etf", "TWD", "tw", "pipeline"),
+        ]])
+
         app = create_app()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/api/fund/search?q=0050")
         assert resp.status_code == 200
         body = resp.json()
         assert body["total"] >= 1
+        assert body["results"][0]["fund_id"] == "0050"
 
     @pytest.mark.asyncio
-    async def test_search_offshore(self, test_db):
+    async def test_search_falls_back_to_isin_registry(self, canned_fund_db):
+        # No postgres match — the registry fallback should still turn up a
+        # Chinese offshore-fund result keyed on "摩根".
+        canned_fund_db["queue"].extend([[]])
+
         app = create_app()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/api/fund/search?q=摩根")
         assert resp.status_code == 200
-        body = resp.json()
-        assert body["total"] >= 1
+        assert resp.json()["total"] >= 1
 
     @pytest.mark.asyncio
-    async def test_search_empty_query(self, test_db):
+    async def test_search_empty_query_rejected(self, canned_fund_db):
         app = create_app()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.get("/api/fund/search?q=")
         assert resp.status_code == 422  # min_length=1
 
 
+# --- Attribution endpoint ---------------------------------------------------
+
+
 class TestAttributionEndpoint:
     @pytest.mark.asyncio
-    async def test_attribution_success(self, test_db):
+    async def test_attribution_success(self, canned_fund_db):
+        # Order: fund_info, holdings (per-fund), benchmark.
+        canned_fund_db["queue"].extend([
+            [("0050", "Yuanta 0050", "tw_etf", "TWD", "tw", "pipeline")],
+            [
+                ("Semiconductor", 0.55, date(2026, 3, 31)),
+                ("Finance", 0.25, date(2026, 3, 31)),
+                ("Electronic Components", 0.20, date(2026, 3, 31)),
+            ],
+            [
+                ("Semiconductor", 0.40, 0.065),
+                ("Finance", 0.30, 0.028),
+                ("Electronic Components", 0.20, 0.041),
+                ("Plastics", 0.10, -0.008),
+            ],
+        ])
+
         app = create_app()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post("/api/attribution", json={
                 "holdings": [{"identifier": "0050", "shares": 100}],
                 "mode": "BF2",
             })
+
         assert resp.status_code == 200
         body = resp.json()
         assert "fund_return" in body
@@ -151,7 +193,22 @@ class TestAttributionEndpoint:
         assert len(body["detail"]) > 0
 
     @pytest.mark.asyncio
-    async def test_attribution_bf3(self, test_db):
+    async def test_attribution_bf3(self, canned_fund_db):
+        canned_fund_db["queue"].extend([
+            [("0050", "Yuanta 0050", "tw_etf", "TWD", "tw", "pipeline")],
+            [
+                ("Semiconductor", 0.55, date(2026, 3, 31)),
+                ("Finance", 0.25, date(2026, 3, 31)),
+                ("Electronic Components", 0.20, date(2026, 3, 31)),
+            ],
+            [
+                ("Semiconductor", 0.40, 0.065),
+                ("Finance", 0.30, 0.028),
+                ("Electronic Components", 0.20, 0.041),
+                ("Plastics", 0.10, -0.008),
+            ],
+        ])
+
         app = create_app()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post("/api/attribution", json={
@@ -162,7 +219,11 @@ class TestAttributionEndpoint:
         assert resp.json()["brinson_mode"] == "BF3"
 
     @pytest.mark.asyncio
-    async def test_attribution_unknown_fund(self, test_db):
+    async def test_attribution_unknown_fund(self, canned_fund_db):
+        # fund_info empty — identifier looks like US stock so no ISIN fallback
+        # fires. `run_attribution` then raises ValueError → 422.
+        canned_fund_db["queue"].extend([[]])
+
         app = create_app()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post("/api/attribution", json={
@@ -171,7 +232,7 @@ class TestAttributionEndpoint:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_attribution_invalid_mode(self, test_db):
+    async def test_attribution_invalid_mode(self, canned_fund_db):
         app = create_app()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post("/api/attribution", json={
@@ -181,7 +242,7 @@ class TestAttributionEndpoint:
         assert resp.status_code == 422
 
     @pytest.mark.asyncio
-    async def test_attribution_empty_holdings(self, test_db):
+    async def test_attribution_empty_holdings(self, canned_fund_db):
         app = create_app()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
             resp = await c.post("/api/attribution", json={
