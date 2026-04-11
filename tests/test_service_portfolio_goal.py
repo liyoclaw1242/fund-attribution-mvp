@@ -1,96 +1,85 @@
-"""Tests for portfolio and goal API endpoints."""
+"""Tests for portfolio and goal API endpoints.
 
-import os
-import sqlite3
-import tempfile
-from unittest.mock import patch
+The service layer now talks to Postgres via async SQLAlchemy. Rather
+than spinning up a real DB in unit tests, each test patches the
+`portfolio_service` functions with `AsyncMock`s that return canned
+values. SQL correctness is exercised separately by the live Docker
+smoke documented in the PR for #129.
+"""
+
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from service.main import create_app
 
-# Use a temp DB for tests
-_TEST_DB = None
+
+@pytest.fixture
+def fake_svc():
+    """Patch every portfolio_service function used by the routers.
+
+    Test bodies can set `fake_svc["<name>"].return_value = ...` (or
+    `side_effect = ...`) to script the next call.
+    """
+    names = [
+        "get_client",
+        "create_client",
+        "list_portfolios",
+        "get_portfolio",
+        "create_holding",
+        "update_holding",
+        "delete_holding",
+        "list_goals",
+        "get_goal",
+        "create_goal",
+        "update_goal",
+        "delete_goal",
+    ]
+    patches = {name: patch(f"service.services.portfolio_service.{name}", new=AsyncMock()) for name in names}
+    mocks = {name: p.start() for name, p in patches.items()}
+    yield mocks
+    for p in patches.values():
+        p.stop()
 
 
-@pytest.fixture(autouse=True)
-def setup_test_db(tmp_path):
-    """Create a fresh test database for each test."""
-    global _TEST_DB
-    db_path = str(tmp_path / "test.db")
-    _TEST_DB = db_path
-
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA journal_mode=WAL")
-
-    # Create tables
-    conn.execute("""
-        CREATE TABLE clients (
-            client_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            kyc_risk_level TEXT DEFAULT 'moderate',
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE client_portfolios (
-            client_id TEXT NOT NULL,
-            fund_code TEXT NOT NULL,
-            bank_name TEXT DEFAULT '',
-            shares REAL NOT NULL DEFAULT 0,
-            cost_basis REAL NOT NULL DEFAULT 0,
-            added_at TEXT NOT NULL DEFAULT (datetime('now')),
-            PRIMARY KEY (client_id, fund_code, bank_name)
-        )
-    """)
-    conn.execute("""
-        CREATE TABLE client_goals (
-            goal_id TEXT PRIMARY KEY,
-            client_id TEXT NOT NULL,
-            goal_type TEXT NOT NULL DEFAULT 'retirement',
-            target_amount REAL NOT NULL,
-            target_year INTEGER NOT NULL,
-            monthly_contribution REAL NOT NULL DEFAULT 0,
-            risk_tolerance TEXT NOT NULL DEFAULT 'moderate',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )
-    """)
-
-    # Seed a test client
-    conn.execute(
-        "INSERT INTO clients (client_id, name) VALUES ('C001', '王大明')"
-    )
-    conn.commit()
-    conn.close()
-
-    with patch("service.services.portfolio_service._DB_PATH", db_path):
-        yield
-
-    _TEST_DB = None
-
-
-def _get_app():
+def _app():
     return create_app()
 
 
-# --- Portfolio endpoints ---
+# --- Portfolio endpoints ---------------------------------------------------
+
 
 class TestPortfolioAPI:
     @pytest.mark.asyncio
-    async def test_list_portfolios(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async def test_list_portfolios(self, fake_svc):
+        fake_svc["list_portfolios"].return_value = [
+            {"client_id": "C001", "name": "王大明", "holding_count": 2},
+        ]
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
             resp = await c.get("/api/portfolio")
         assert resp.status_code == 200
         data = resp.json()
-        assert len(data) >= 1
+        assert len(data) == 1
+        assert data[0]["client_id"] == "C001"
 
     @pytest.mark.asyncio
-    async def test_create_holding(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async def test_create_holding(self, fake_svc):
+        fake_svc["get_client"].return_value = {
+            "client_id": "C001",
+            "name": "王大明",
+            "kyc_risk_level": "moderate",
+            "created_at": "2026-04-11T00:00:00+00:00",
+        }
+        fake_svc["create_holding"].return_value = {
+            "client_id": "C001",
+            "fund_code": "0050",
+            "bank_name": "國泰",
+            "shares": 100.0,
+            "cost_basis": 150000.0,
+            "added_at": "2026-04-11T00:00:00+00:00",
+        }
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
             resp = await c.post("/api/portfolio", json={
                 "client_id": "C001",
                 "fund_code": "0050",
@@ -104,9 +93,9 @@ class TestPortfolioAPI:
         assert body["shares"] == 100
 
     @pytest.mark.asyncio
-    async def test_create_holding_client_not_found(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async def test_create_holding_client_not_found(self, fake_svc):
+        fake_svc["get_client"].return_value = None
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
             resp = await c.post("/api/portfolio", json={
                 "client_id": "NONEXIST",
                 "fund_code": "0050",
@@ -116,46 +105,74 @@ class TestPortfolioAPI:
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_get_portfolio(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            # Create a holding first
-            await c.post("/api/portfolio", json={
-                "client_id": "C001", "fund_code": "0050",
-                "shares": 50, "cost_basis": 75000,
-            })
+    async def test_get_portfolio(self, fake_svc):
+        fake_svc["get_client"].return_value = {
+            "client_id": "C001", "name": "王大明",
+            "kyc_risk_level": "moderate", "created_at": "2026-04-11T00:00:00+00:00",
+        }
+        fake_svc["get_portfolio"].return_value = [
+            {
+                "client_id": "C001", "fund_code": "0050", "bank_name": "",
+                "shares": 50.0, "cost_basis": 75000.0,
+                "added_at": "2026-04-11T00:00:00+00:00",
+            },
+        ]
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
             resp = await c.get("/api/portfolio/C001")
         assert resp.status_code == 200
         body = resp.json()
         assert body["client_id"] == "C001"
-        assert body["total_holdings"] >= 1
+        assert body["total_holdings"] == 1
 
     @pytest.mark.asyncio
-    async def test_get_portfolio_not_found(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async def test_get_portfolio_not_found(self, fake_svc):
+        fake_svc["get_client"].return_value = None
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
             resp = await c.get("/api/portfolio/NONEXIST")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_delete_holding(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            await c.post("/api/portfolio", json={
-                "client_id": "C001", "fund_code": "0056",
-                "shares": 10, "cost_basis": 5000,
-            })
+    async def test_delete_holding(self, fake_svc):
+        fake_svc["delete_holding"].return_value = True
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
             resp = await c.delete("/api/portfolio/C001/0056?bank_name=")
         assert resp.status_code == 204
 
+    @pytest.mark.asyncio
+    async def test_delete_holding_not_found(self, fake_svc):
+        fake_svc["delete_holding"].return_value = False
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
+            resp = await c.delete("/api/portfolio/C001/NOPE?bank_name=")
+        assert resp.status_code == 404
 
-# --- Goal endpoints ---
+
+# --- Goal endpoints --------------------------------------------------------
+
+
+_CLIENT = {
+    "client_id": "C001", "name": "王大明",
+    "kyc_risk_level": "moderate", "created_at": "2026-04-11T00:00:00+00:00",
+}
+
+_GOAL = {
+    "goal_id": "g0000001",
+    "client_id": "C001",
+    "goal_type": "retirement",
+    "target_amount": 10000000.0,
+    "target_year": 2040,
+    "monthly_contribution": 30000.0,
+    "risk_tolerance": "moderate",
+    "created_at": "2026-04-11T00:00:00+00:00",
+    "updated_at": "2026-04-11T00:00:00+00:00",
+}
+
 
 class TestGoalAPI:
     @pytest.mark.asyncio
-    async def test_create_goal(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async def test_create_goal(self, fake_svc):
+        fake_svc["get_client"].return_value = _CLIENT
+        fake_svc["create_goal"].return_value = dict(_GOAL)
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
             resp = await c.post("/api/goal", json={
                 "client_id": "C001",
                 "goal_type": "retirement",
@@ -167,65 +184,53 @@ class TestGoalAPI:
         assert resp.status_code == 201
         body = resp.json()
         assert body["target_amount"] == 10000000
-        assert body["goal_id"]
+        assert body["goal_id"] == "g0000001"
 
     @pytest.mark.asyncio
-    async def test_list_goals(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            await c.post("/api/goal", json={
-                "client_id": "C001", "target_amount": 5000000,
-                "target_year": 2035, "monthly_contribution": 20000,
-            })
+    async def test_list_goals(self, fake_svc):
+        fake_svc["get_client"].return_value = _CLIENT
+        fake_svc["list_goals"].return_value = [dict(_GOAL)]
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
             resp = await c.get("/api/goal/C001")
         assert resp.status_code == 200
-        assert len(resp.json()) >= 1
+        assert len(resp.json()) == 1
 
     @pytest.mark.asyncio
-    async def test_list_goals_client_not_found(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async def test_list_goals_client_not_found(self, fake_svc):
+        fake_svc["get_client"].return_value = None
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
             resp = await c.get("/api/goal/NONEXIST")
         assert resp.status_code == 404
 
     @pytest.mark.asyncio
-    async def test_update_goal(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            create_resp = await c.post("/api/goal", json={
-                "client_id": "C001", "target_amount": 5000000,
-                "target_year": 2035, "monthly_contribution": 20000,
-            })
-            goal_id = create_resp.json()["goal_id"]
-            resp = await c.put(f"/api/goal/{goal_id}", json={
-                "target_amount": 8000000,
-            })
+    async def test_update_goal(self, fake_svc):
+        updated = dict(_GOAL)
+        updated["target_amount"] = 8000000.0
+        fake_svc["update_goal"].return_value = updated
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
+            resp = await c.put("/api/goal/g0000001", json={"target_amount": 8000000})
         assert resp.status_code == 200
         assert resp.json()["target_amount"] == 8000000
 
     @pytest.mark.asyncio
-    async def test_delete_goal(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            create_resp = await c.post("/api/goal", json={
-                "client_id": "C001", "target_amount": 3000000,
-                "target_year": 2030, "monthly_contribution": 10000,
-            })
-            goal_id = create_resp.json()["goal_id"]
-            resp = await c.delete(f"/api/goal/{goal_id}")
+    async def test_update_goal_not_found(self, fake_svc):
+        fake_svc["update_goal"].return_value = None
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
+            resp = await c.put("/api/goal/NOPE", json={"target_amount": 1})
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_delete_goal(self, fake_svc):
+        fake_svc["delete_goal"].return_value = True
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
+            resp = await c.delete("/api/goal/g0000001")
         assert resp.status_code == 204
 
     @pytest.mark.asyncio
-    async def test_simulate_goal(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
-            create_resp = await c.post("/api/goal", json={
-                "client_id": "C001", "target_amount": 10000000,
-                "target_year": 2040, "monthly_contribution": 30000,
-                "risk_tolerance": "moderate",
-            })
-            goal_id = create_resp.json()["goal_id"]
-            resp = await c.get(f"/api/goal/{goal_id}/simulate")
+    async def test_simulate_goal(self, fake_svc):
+        fake_svc["get_goal"].return_value = dict(_GOAL)
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
+            resp = await c.get("/api/goal/g0000001/simulate")
         assert resp.status_code == 200
         body = resp.json()
         assert 0 <= body["success_probability"] <= 1
@@ -233,8 +238,8 @@ class TestGoalAPI:
         assert body["years_to_goal"] > 0
 
     @pytest.mark.asyncio
-    async def test_simulate_goal_not_found(self, setup_test_db):
-        app = _get_app()
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
+    async def test_simulate_goal_not_found(self, fake_svc):
+        fake_svc["get_goal"].return_value = None
+        async with AsyncClient(transport=ASGITransport(app=_app()), base_url="http://test") as c:
             resp = await c.get("/api/goal/NONEXIST/simulate")
         assert resp.status_code == 404

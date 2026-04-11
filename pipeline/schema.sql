@@ -105,6 +105,40 @@ CREATE TABLE IF NOT EXISTS pipeline_run (
     params_json JSONB
 );
 
+-- v2.0 client portfolio management — ported from the legacy SQLite schema.
+-- Widened to Postgres-native types: TIMESTAMPTZ for time columns and
+-- NUMERIC for monetary amounts so we keep cent-level precision for shares
+-- and cost basis. FK cascades drop holdings + goals when a client is
+-- deleted, matching the user-facing "remove client" flow.
+CREATE TABLE IF NOT EXISTS clients (
+    client_id      TEXT PRIMARY KEY,
+    name           TEXT NOT NULL,
+    kyc_risk_level TEXT NOT NULL DEFAULT 'moderate',
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS client_portfolios (
+    client_id  TEXT NOT NULL REFERENCES clients(client_id) ON DELETE CASCADE,
+    fund_code  TEXT NOT NULL,
+    bank_name  TEXT NOT NULL DEFAULT '',
+    shares     NUMERIC(18,4) NOT NULL DEFAULT 0,
+    cost_basis NUMERIC(18,2) NOT NULL DEFAULT 0,
+    added_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (client_id, fund_code, bank_name)
+);
+
+CREATE TABLE IF NOT EXISTS client_goals (
+    goal_id              TEXT PRIMARY KEY,
+    client_id            TEXT NOT NULL REFERENCES clients(client_id) ON DELETE CASCADE,
+    goal_type            TEXT NOT NULL DEFAULT 'retirement',
+    target_amount        NUMERIC(18,2) NOT NULL,
+    target_year          INTEGER NOT NULL,
+    monthly_contribution NUMERIC(18,2) NOT NULL DEFAULT 0,
+    risk_tolerance       TEXT NOT NULL DEFAULT 'moderate',
+    created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Indexes for common query patterns
 CREATE INDEX IF NOT EXISTS idx_stock_price_date ON stock_price (date);
 CREATE INDEX IF NOT EXISTS idx_industry_index_date ON industry_index (date);
@@ -113,3 +147,6 @@ CREATE INDEX IF NOT EXISTS idx_fund_holding_fund_date ON fund_holding (fund_id, 
 CREATE INDEX IF NOT EXISTS idx_fund_nav_fund_date ON fund_nav (fund_id, date);
 CREATE INDEX IF NOT EXISTS idx_fx_rate_date ON fx_rate (date);
 CREATE INDEX IF NOT EXISTS idx_pipeline_run_fetcher ON pipeline_run (fetcher, started_at);
+CREATE INDEX IF NOT EXISTS idx_client_portfolios_client ON client_portfolios (client_id);
+CREATE INDEX IF NOT EXISTS idx_client_portfolios_fund ON client_portfolios (fund_code);
+CREATE INDEX IF NOT EXISTS idx_client_goals_client ON client_goals (client_id);

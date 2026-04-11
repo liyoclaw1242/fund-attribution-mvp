@@ -17,22 +17,22 @@ router = APIRouter(prefix="/api/goal", tags=["goal"])
 @router.get("/{client_id}", response_model=list[GoalResponse])
 async def list_goals(client_id: str):
     """List all goals for a client."""
-    client = svc.get_client(client_id)
+    client = await svc.get_client(client_id)
     if not client:
         raise HTTPException(status_code=404, detail=f"Client {client_id} not found")
 
-    goals = svc.list_goals(client_id)
+    goals = await svc.list_goals(client_id)
     return goals
 
 
 @router.post("", response_model=GoalResponse, status_code=201)
 async def create_goal(req: CreateGoalRequest):
     """Create a new financial goal."""
-    client = svc.get_client(req.client_id)
+    client = await svc.get_client(req.client_id)
     if not client:
         raise HTTPException(status_code=404, detail=f"Client {req.client_id} not found")
 
-    goal = svc.create_goal(
+    goal = await svc.create_goal(
         client_id=req.client_id,
         goal_type=req.goal_type,
         target_amount=req.target_amount,
@@ -46,7 +46,7 @@ async def create_goal(req: CreateGoalRequest):
 @router.put("/{goal_id}", response_model=GoalResponse)
 async def update_goal(goal_id: str, req: UpdateGoalRequest):
     """Update goal parameters."""
-    result = svc.update_goal(
+    result = await svc.update_goal(
         goal_id,
         target_amount=req.target_amount,
         target_year=req.target_year,
@@ -61,7 +61,7 @@ async def update_goal(goal_id: str, req: UpdateGoalRequest):
 @router.delete("/{goal_id}", status_code=204)
 async def delete_goal(goal_id: str):
     """Remove a goal."""
-    deleted = svc.delete_goal(goal_id)
+    deleted = await svc.delete_goal(goal_id)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
 
@@ -69,7 +69,7 @@ async def delete_goal(goal_id: str):
 @router.get("/{goal_id}/simulate", response_model=SimulationResponse)
 async def simulate_goal(goal_id: str):
     """Re-run Monte Carlo simulation for a goal."""
-    goal_data = svc.get_goal(goal_id)
+    goal_data = await svc.get_goal(goal_id)
     if not goal_data:
         raise HTTPException(status_code=404, detail=f"Goal {goal_id} not found")
 
