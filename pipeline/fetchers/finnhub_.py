@@ -12,11 +12,11 @@ Endpoints:
 
 import asyncio
 import logging
-from datetime import date
 
 import aiohttp
 import pandas as pd
 
+from pipeline._dates import coerce_date
 from pipeline.config import PipelineConfig
 from pipeline.fetchers.base import BaseFetcher
 from pipeline.fetchers.fund_isin_registry import get_all_isins, lookup_name
@@ -84,7 +84,7 @@ class FinnhubFundFetcher(BaseFetcher):
         # 1. Holdings
         holdings = await self._api_get(session, "/mutual-fund/holdings", {"isin": isin})
         if holdings:
-            as_of = holdings.get("atDate", date.today().isoformat())
+            as_of = coerce_date(holdings.get("atDate") or None)
             for h in holdings.get("holdings", []):
                 if not h.get("name"):
                     continue
@@ -103,7 +103,7 @@ class FinnhubFundFetcher(BaseFetcher):
         # 2. Sector exposure
         sector_data = await self._api_get(session, "/mutual-fund/sector", {"isin": isin})
         if sector_data:
-            as_of = sector_data.get("atDate", date.today().isoformat())
+            as_of = coerce_date(sector_data.get("atDate") or None)
             for s in sector_data.get("sectorExposure", []):
                 records.append({
                     "fund_id": isin,
