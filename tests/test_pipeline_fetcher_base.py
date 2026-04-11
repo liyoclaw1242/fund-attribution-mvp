@@ -8,8 +8,21 @@ import pytest
 from pipeline.fetchers.base import BaseFetcher
 
 
+def _make_tx_mock():
+    tx = MagicMock()
+    tx.__aenter__ = AsyncMock(return_value=tx)
+    tx.__aexit__ = AsyncMock(return_value=False)
+    return tx
+
+
 def _make_pool_with_conn(mock_conn):
-    """Create a mock pool whose acquire() yields mock_conn as async context manager."""
+    """Create a mock pool whose acquire() yields mock_conn as async context manager.
+
+    The returned mock_conn.transaction() also returns an async context
+    manager so BaseFetcher._load can wrap its staging sequence in one.
+    """
+    if not hasattr(mock_conn, "transaction") or not isinstance(mock_conn.transaction, MagicMock):
+        mock_conn.transaction = MagicMock(return_value=_make_tx_mock())
     mock_pool = MagicMock()
     cm = MagicMock()
     cm.__aenter__ = AsyncMock(return_value=mock_conn)
@@ -140,3 +153,40 @@ class TestBaseFetcherLoad:
         mock_pool = MagicMock()
         count = await fetcher._load(mock_pool, df)
         assert count == 0
+
+    @pytest.mark.asyncio
+    async def test_load_wraps_staging_in_transaction(self):
+        """Regression: CREATE TEMP TABLE + COPY + INSERT must run inside a
+        single explicit conn.transaction() or the ON COMMIT DROP temp table
+        disappears between statements in asyncpg autocommit mode."""
+        fetcher = DummyFetcher()
+        df = pd.DataFrame({"stock_id": ["2330"], "stock_name": ["TSMC"]})
+
+        call_log: list[str] = []
+
+        mock_conn = AsyncMock()
+        mock_conn.execute = AsyncMock(
+            side_effect=lambda sql, *a, **kw: (call_log.append(f"exec:{sql.split()[0]}"), "INSERT 0 1")[1]
+        )
+        mock_conn.copy_records_to_table = AsyncMock(
+            side_effect=lambda *a, **kw: call_log.append("copy")
+        )
+
+        tx = _make_tx_mock()
+        tx.__aenter__ = AsyncMock(side_effect=lambda: (call_log.append("tx:enter"), tx)[1])
+        tx.__aexit__ = AsyncMock(side_effect=lambda *a: (call_log.append("tx:exit"), False)[1])
+        mock_conn.transaction = MagicMock(return_value=tx)
+
+        mock_pool = _make_pool_with_conn(mock_conn)
+        await fetcher._load(mock_pool, df)
+
+        # Transaction must open before CREATE TEMP TABLE and close after INSERT.
+        assert call_log[0] == "tx:enter", f"transaction not entered first: {call_log}"
+        assert call_log[-1] == "tx:exit", f"transaction not exited last: {call_log}"
+
+        # Required staging sequence, in order, inside the transaction.
+        inner = call_log[1:-1]
+        assert inner == ["exec:CREATE", "copy", "exec:INSERT"], (
+            f"unexpected staging order: {inner}"
+        )
+        mock_conn.transaction.assert_called_once_with()
