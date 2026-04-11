@@ -18,18 +18,17 @@ router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 @router.get("", response_model=list[dict])
 async def list_portfolios():
     """List all clients with their holding counts."""
-    return svc.list_portfolios()
+    return await svc.list_portfolios()
 
 
 @router.post("", response_model=PortfolioHolding, status_code=201)
 async def create_holding(req: CreatePortfolioRequest):
     """Create or upsert a holding for a client."""
-    # Ensure client exists
-    client = svc.get_client(req.client_id)
+    client = await svc.get_client(req.client_id)
     if not client:
         raise HTTPException(status_code=404, detail=f"Client {req.client_id} not found")
 
-    holding = svc.create_holding(
+    holding = await svc.create_holding(
         client_id=req.client_id,
         fund_code=req.fund_code,
         bank_name=req.bank_name,
@@ -42,11 +41,11 @@ async def create_holding(req: CreatePortfolioRequest):
 @router.get("/{client_id}", response_model=PortfolioResponse)
 async def get_portfolio(client_id: str):
     """Get a client's full portfolio with cross-bank aggregation."""
-    client = svc.get_client(client_id)
+    client = await svc.get_client(client_id)
     if not client:
         raise HTTPException(status_code=404, detail=f"Client {client_id} not found")
 
-    holdings = svc.get_portfolio(client_id)
+    holdings = await svc.get_portfolio(client_id)
     return PortfolioResponse(
         client_id=client_id,
         holdings=holdings,
@@ -60,7 +59,7 @@ async def update_holding(
 ):
     """Update a holding's shares or cost basis."""
     bank_name = req.bank_name if req.bank_name is not None else ""
-    result = svc.update_holding(
+    result = await svc.update_holding(
         client_id=client_id,
         fund_code=fund_code,
         bank_name=bank_name,
@@ -78,7 +77,7 @@ async def update_holding(
 @router.delete("/{client_id}/{fund_code}", status_code=204)
 async def delete_holding(client_id: str, fund_code: str, bank_name: str = ""):
     """Remove a holding."""
-    deleted = svc.delete_holding(client_id, fund_code, bank_name)
+    deleted = await svc.delete_holding(client_id, fund_code, bank_name)
     if not deleted:
         raise HTTPException(
             status_code=404,
