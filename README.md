@@ -23,35 +23,67 @@ Brinson-Fachler 基金歸因分析系統，專為台灣理財顧問設計。
 ## Architecture
 
 ```
-db (PostgreSQL) ← pipeline (data ingestion) + service (FastAPI) ← app (Streamlit)
+                         ┌─────────────┐
+                         │    nginx    │  (profile: production)
+                         │   :80 :443  │
+                         └──┬───────┬──┘
+                            │       │
+               /            │       │  /api/
+                            ▼       ▼
+                      ┌──────┐   ┌──────────┐
+                      │ app  │   │ service  │
+                      │:8501 │   │  :8000   │
+                      └───┬──┘   └────┬─────┘
+                          │           │
+                          └──► API ───┘
+                                      │
+                                      ▼
+                              ┌──────────────┐
+                              │      db      │◄─── pipeline
+                              │ (Postgres)   │   (scheduled fetchers)
+                              │    :5432     │
+                              └──────────────┘
 ```
 
-| Container | Port | Purpose |
-|-----------|------|---------|
-| db | 5432 | PostgreSQL data store |
-| pipeline | 8080 | Scheduled data ingestion |
-| service | 8000 | FastAPI REST API |
-| app | 8501 | Streamlit UI |
+| Container | Port | Purpose                                        |
+|-----------|------|------------------------------------------------|
+| `db`      | 5432 | PostgreSQL data store (pgdata volume)          |
+| `pipeline`| —    | APScheduler: scheduled data ingestion          |
+| `service` | 8000 | FastAPI REST API                               |
+| `app`     | 8501 | Streamlit UI                                   |
+| `nginx`   | 80/443 | Reverse proxy (optional, `--profile production`) |
+
+Dependency chain:
+`db (healthy)` → `pipeline` + `service` → `app`, with `nginx` fronting `app` and `service` when the production profile is enabled.
+
+See [`docs/k8s-migration.md`](docs/k8s-migration.md) for the K8s migration path.
 
 ## Quick Start
+
+```bash
+# One-click (copies .env.example on first run, then starts the stack)
+scripts/start.sh
+
+# With nginx reverse proxy on :80 and :443
+scripts/start.sh production
+```
+
+Or use `docker compose` directly:
 
 ```bash
 cp .env.example .env
 # Edit .env with your ANTHROPIC_API_KEY
 
-# Full stack (all 4 containers: db → pipeline + service → app)
-docker-compose up
+# Dev stack (db + pipeline + service + app)
+docker compose up -d
 
-# Pipeline only
-docker-compose up db pipeline
+# Production stack (adds nginx)
+docker compose --profile production up -d
 
-# Service API only
-docker-compose up db service
+# Stop and persist data
+docker compose down   # pgdata volume survives
 
-# App only (original SQLite mode)
-docker-compose up app
-
-# Or local (app only)
+# Local (app only, no Docker)
 pip install -r requirements.txt
 streamlit run app.py
 ```

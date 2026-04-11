@@ -1,17 +1,31 @@
 services:
-  app:
-    build: .
-    ports:
-      - "8501:8501"
-    volumes:
-      - ./data/sitca_raw:/app/data/sitca_raw
-      - ./output:/app/output
-    env_file:
-      - .env
+  db:
+    image: postgres:16-alpine
     environment:
-      API_BASE: http://service:8000
+      POSTGRES_DB: fund_data
+      POSTGRES_USER: pipeline
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpass}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pipeline -d fund_data"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  pipeline:
+    build: ./pipeline
     depends_on:
-      - service
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_URL: postgresql://pipeline:${POSTGRES_PASSWORD:-devpass}@db:5432/fund_data
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
+      FINMIND_API_TOKEN: ${FINMIND_API_TOKEN:-}
+      SCHEDULER_TIMEZONE: ${SCHEDULER_TIMEZONE:-Asia/Taipei}
     restart: unless-stopped
 
   service:
@@ -26,35 +40,42 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "8000:8000"
-    restart: unless-stopped
-
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: fund_data
-      POSTGRES_USER: pipeline
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpass}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U pipeline"]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
       retries: 5
-
-  pipeline:
-    build: ./pipeline
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      POSTGRES_URL: postgresql://pipeline:${POSTGRES_PASSWORD:-devpass}@db:5432/fund_data
-      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
-      FINMIND_API_TOKEN: ${FINMIND_API_TOKEN:-}
-      SCHEDULER_TIMEZONE: Asia/Taipei
+      start_period: 20s
     restart: unless-stopped
+
+  app:
+    build: .
+    depends_on:
+      - service
+    env_file:
+      - .env
+    environment:
+      API_BASE: http://service:8000
+    volumes:
+      - ./data/sitca_raw:/app/data/sitca_raw
+      - ./output:/app/output
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    depends_on:
+      - app
+      - service
+    volumes:
+      - ./ops/nginx.container.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    restart: unless-stopped
+    profiles:
+      - production
 
 volumes:
   pgdata:
