@@ -18,6 +18,12 @@ COPY config/ ./config/
 COPY interfaces.py ./interfaces.py
 COPY engine/ ./engine/
 
+# Only the ISIN registry from pipeline/ is needed at runtime (search fallback
+# for offshore funds). Stub out the pipeline package __init__.py files so the
+# import doesn't try to pull in the fetchers/scheduler/apscheduler stack.
+COPY pipeline/fetchers/fund_isin_registry.py ./pipeline/fetchers/fund_isin_registry.py
+RUN : > ./pipeline/__init__.py && : > ./pipeline/fetchers/__init__.py
+
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s CMD curl -f http://localhost:8000/api/health || exit 1
 CMD ["uvicorn", "service.main:app", "--host", "0.0.0.0", "--port", "8000"]

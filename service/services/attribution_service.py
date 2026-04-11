@@ -12,7 +12,7 @@ from service.services.fund_service import get_fund_by_identifier, get_benchmark_
 logger = logging.getLogger(__name__)
 
 
-def run_attribution(
+async def run_attribution(
     holdings_input: list[dict],
     mode: str = "BF2",
     benchmark: str = "auto",
@@ -32,7 +32,7 @@ def run_attribution(
     # 1. Resolve fund holdings
     all_industries = {}
     for h in holdings_input:
-        fund = get_fund_by_identifier(h["identifier"])
+        fund = await get_fund_by_identifier(h["identifier"])
         if not fund:
             logger.warning("Fund not found: %s — skipping", h["identifier"])
             continue
@@ -53,7 +53,7 @@ def run_attribution(
         raise ValueError("No holdings could be resolved from the provided identifiers")
 
     # 2. Fetch benchmark
-    benchmark_data = get_benchmark_data()
+    benchmark_data = await get_benchmark_data()
     bench_by_industry = {b["industry"]: b for b in benchmark_data}
 
     # 3. Merge into attribution DataFrame
