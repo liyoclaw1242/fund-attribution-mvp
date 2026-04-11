@@ -34,6 +34,39 @@ async def execute_schema(pool: asyncpg.Pool) -> None:
         await conn.execute(sql)
 
 
+# Whitelist of tables allowed for emptiness checks. Prevents SQL injection
+# since asyncpg cannot parameterize identifiers — values are interpolated.
+_EMPTY_CHECK_TABLES = frozenset({
+    "stock_info",
+    "stock_price",
+    "industry_index",
+    "industry_weight",
+    "fund_info",
+    "fund_holding",
+    "fund_nav",
+    "fx_rate",
+    "pipeline_run",
+})
+
+
+async def is_empty(pool: asyncpg.Pool, table: str) -> bool:
+    """Return True when the given table contains zero rows.
+
+    Args:
+        pool: asyncpg connection pool.
+        table: Table name. Must be in `_EMPTY_CHECK_TABLES`.
+
+    Raises:
+        ValueError: If `table` is not in the whitelist.
+    """
+    if table not in _EMPTY_CHECK_TABLES:
+        raise ValueError(f"is_empty: table '{table}' not in whitelist")
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(f"SELECT EXISTS (SELECT 1 FROM {table} LIMIT 1) AS has_row")
+        return not row["has_row"]
+
+
 async def log_pipeline_run(
     pool: asyncpg.Pool,
     fetcher: str,

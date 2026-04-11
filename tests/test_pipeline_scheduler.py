@@ -201,6 +201,7 @@ class TestHealthEndpoint:
         assert body["registered"] == ["twse_mi_index", "fx_rates"]
         assert body["last_run"] == "2026-04-08T10:00:00+00:00"
         assert "h" in body["uptime"]
+        assert body["seed"] == "idle"
 
     @pytest.mark.asyncio
     async def test_health_handler_no_runs_yet(self):
@@ -216,3 +217,81 @@ class TestHealthEndpoint:
         assert body["status"] == "ok"
         assert body["fetchers"] == 0
         assert body["last_run"] is None
+        assert body["seed"] == "idle"
+
+
+class TestInitialSeed:
+    @pytest.mark.asyncio
+    async def test_skips_seed_when_db_has_data(self):
+        """_maybe_initial_seed must NOT run fetchers when tables already have rows."""
+        mock_pool = _make_pool_mock()
+        sched = PipelineScheduler()
+        sched.pool = mock_pool
+
+        fetcher = MagicMock()
+        fetcher.run = AsyncMock(return_value=10)
+        sched._registered_jobs = [(fetcher, "twse_mi_index")]
+
+        with patch("pipeline.scheduler.is_empty", new_callable=AsyncMock, return_value=False) as mock_empty, \
+             patch("pipeline.scheduler.log_pipeline_run", new_callable=AsyncMock) as mock_log:
+            await sched._maybe_initial_seed()
+
+        mock_empty.assert_awaited()  # at least one check
+        fetcher.run.assert_not_awaited()
+        mock_log.assert_not_awaited()
+        assert sched._seed_status == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_runs_seed_when_db_empty(self):
+        """When all seed-check tables are empty, every registered fetcher runs once."""
+        mock_pool = _make_pool_mock()
+        sched = PipelineScheduler()
+        sched.pool = mock_pool
+
+        f1 = MagicMock(); f1.run = AsyncMock(return_value=5)
+        f2 = MagicMock(); f2.run = AsyncMock(return_value=8)
+        sched._registered_jobs = [(f1, "twse_mi_index"), (f2, "fx_rates")]
+
+        with patch("pipeline.scheduler.is_empty", new_callable=AsyncMock, return_value=True), \
+             patch("pipeline.scheduler.log_pipeline_run", new_callable=AsyncMock) as mock_log:
+            await sched._maybe_initial_seed()
+
+        f1.run.assert_awaited_once_with(mock_pool)
+        f2.run.assert_awaited_once_with(mock_pool)
+        assert sched._seed_status == "completed"
+        # Two log entries: running marker + final success
+        assert mock_log.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_seed_continues_on_fetcher_error(self):
+        """One failing fetcher should not abort the rest of the seed."""
+        mock_pool = _make_pool_mock()
+        sched = PipelineScheduler()
+        sched.pool = mock_pool
+
+        good = MagicMock(); good.run = AsyncMock(return_value=3)
+        bad = MagicMock(); bad.run = AsyncMock(side_effect=ConnectionError("API down"))
+        sched._registered_jobs = [(bad, "broken"), (good, "ok_fetcher")]
+
+        with patch("pipeline.scheduler.is_empty", new_callable=AsyncMock, return_value=True), \
+             patch("pipeline.scheduler.log_pipeline_run", new_callable=AsyncMock) as mock_log:
+            await sched._maybe_initial_seed()
+
+        good.run.assert_awaited_once()
+        bad.run.assert_awaited_once()
+        assert sched._seed_status == "completed"
+        # Final log call should record partial status
+        final_call_kwargs = mock_log.await_args_list[-1].kwargs
+        assert final_call_kwargs["status"] == "partial"
+
+    @pytest.mark.asyncio
+    async def test_is_db_empty_short_circuits(self):
+        """_is_db_empty returns False as soon as one table has rows."""
+        mock_pool = _make_pool_mock()
+        sched = PipelineScheduler()
+        sched.pool = mock_pool
+
+        # First table empty, second non-empty -> overall not empty
+        with patch("pipeline.scheduler.is_empty", new_callable=AsyncMock, side_effect=[True, False]):
+            result = await sched._is_db_empty()
+        assert result is False
