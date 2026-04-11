@@ -4,6 +4,9 @@
 # Usage:
 #   scripts/start.sh              # dev stack (db + pipeline + service + app)
 #   scripts/start.sh production   # dev stack + nginx reverse proxy on :80/:443
+#
+# Compatible with bash 3.2+ (macOS default). Array expansions use the
+# ${arr[@]+"${arr[@]}"} idiom so empty arrays don't trip `set -u`.
 
 set -euo pipefail
 
@@ -28,11 +31,11 @@ else
     echo "Starting dev stack (no nginx). Use 'scripts/start.sh production' to include nginx."
 fi
 
-docker compose "${PROFILE_ARGS[@]}" up -d
+docker compose ${PROFILE_ARGS[@]+"${PROFILE_ARGS[@]}"} up -d
 
 echo
 echo "Waiting for services to become healthy..."
-docker compose "${PROFILE_ARGS[@]}" ps
+docker compose ${PROFILE_ARGS[@]+"${PROFILE_ARGS[@]}"} ps
 
 echo
 echo "Ready:"
