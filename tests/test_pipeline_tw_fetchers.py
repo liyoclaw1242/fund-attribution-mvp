@@ -1,5 +1,6 @@
 """Tests for Taiwan market fetchers — TWSE, SITCA, FinMind."""
 
+from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pandas as pd
@@ -46,6 +47,18 @@ class TestTwseMiIndexFetcher:
         df = f.transform(raw)
         assert df.empty  # Bad close_index → skipped
 
+    def test_transform_emits_date_objects(self):
+        """Regression #128: every emitted row's `date` must be a
+        datetime.date, not an ISO string — asyncpg rejects strings on
+        DATE column binds with 'str' object has no attribute 'toordinal'."""
+        f = TwseMiIndexFetcher.__new__(TwseMiIndexFetcher)
+        raw = [{"指數": "半導體類指數", "收盤指數": "1,234.56", "漲跌百分比": "1.23"}]
+        df = f.transform(raw)
+        assert len(df) == 1
+        assert isinstance(df.iloc[0]["date"], date), (
+            f"emitted date={df.iloc[0]['date']!r} ({type(df.iloc[0]['date']).__name__})"
+        )
+
 
 # --- TWSE STOCK_DAY_ALL ---
 
@@ -70,6 +83,14 @@ class TestTwseStockDayAllFetcher:
         raw = [{"Code": "", "ClosingPrice": "100", "Change": "0", "TradeVolume": "0"}]
         df = f.transform(raw)
         assert df.empty
+
+    def test_transform_emits_date_objects(self):
+        """Regression #128: same asyncpg bind constraint as MiIndex."""
+        f = TwseStockDayAllFetcher.__new__(TwseStockDayAllFetcher)
+        raw = [{"Code": "2330", "ClosingPrice": "950.00", "Change": "1.5", "TradeVolume": "100"}]
+        df = f.transform(raw)
+        assert len(df) == 1
+        assert isinstance(df.iloc[0]["date"], date)
 
 
 # --- TWSE Company Info ---

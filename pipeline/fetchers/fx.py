@@ -5,11 +5,11 @@ Fallback: hardcoded recent rates for resilience.
 """
 
 import logging
-from datetime import date
 
 import aiohttp
 import pandas as pd
 
+from pipeline._dates import coerce_date
 from pipeline.fetchers.base import BaseFetcher
 
 logger = logging.getLogger(__name__)
@@ -41,9 +41,9 @@ class FxRateFetcher(BaseFetcher):
         """Fetch latest FX rates.
 
         Args:
-            params: {"date": "2026-04-08"} — optional, defaults to today.
+            params: {"date": "2026-04-08" | date(...)} — optional, defaults to today.
         """
-        target_date = params.get("date", date.today().isoformat())
+        target_date = coerce_date(params.get("date"))
         results = []
 
         for pair in self.pairs:
@@ -58,7 +58,7 @@ class FxRateFetcher(BaseFetcher):
 
         return results
 
-    async def _fetch_rate(self, pair: str, target_date: str) -> float | None:
+    async def _fetch_rate(self, pair, target_date) -> float | None:
         """Fetch a single pair rate with fallback."""
         base = pair[:3]
         quote = pair[3:]
@@ -79,10 +79,14 @@ class FxRateFetcher(BaseFetcher):
         return None
 
     async def _fetch_from_api(
-        self, base: str, quote: str, target_date: str
+        self, base: str, quote: str, target_date
     ) -> float | None:
-        """Fetch from exchangerate.host API."""
-        url = f"https://api.exchangerate.host/{target_date}"
+        """Fetch from exchangerate.host API.
+
+        The URL path still uses an ISO string — the bug is only at the
+        asyncpg bind boundary, not the HTTP request.
+        """
+        url = f"https://api.exchangerate.host/{target_date.isoformat()}"
         params = {"base": base, "symbols": quote}
 
         async with aiohttp.ClientSession() as session:

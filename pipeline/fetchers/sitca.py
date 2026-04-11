@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from pipeline._dates import coerce_date
 from pipeline.fetchers.base import BaseFetcher
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ class SitcaFetcher(BaseFetcher):
 
             records.append({
                 "fund_id": fund_code,
-                "as_of_date": pd.Timestamp.now().strftime("%Y-%m-%d"),
+                "as_of_date": coerce_date(None),
                 "stock_id": None,
                 "stock_name": industry,
                 "weight": float(weight) if pd.notna(weight) else 0,

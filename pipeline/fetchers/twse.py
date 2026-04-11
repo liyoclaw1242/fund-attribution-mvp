@@ -10,11 +10,11 @@ Respects TWSE_RATE_LIMIT_DELAY. Uses verify=False for TWSE's SSL cert.
 
 import asyncio
 import logging
-from datetime import date
 
 import aiohttp
 import pandas as pd
 
+from pipeline._dates import coerce_date
 from pipeline.config import PipelineConfig
 from pipeline.fetchers.base import BaseFetcher
 
@@ -66,7 +66,7 @@ class TwseMiIndexFetcher(BaseFetcher):
 
     def transform(self, raw: list[dict]) -> pd.DataFrame:
         records = []
-        today = date.today().isoformat()
+        today = coerce_date(None)
 
         for item in raw:
             index_name = item.get("指數", "")
@@ -115,7 +115,7 @@ class TwseStockDayAllFetcher(BaseFetcher):
 
     def transform(self, raw: list[dict]) -> pd.DataFrame:
         records = []
-        today = date.today().isoformat()
+        today = coerce_date(None)
 
         for item in raw:
             stock_id = item.get("Code", "").strip()

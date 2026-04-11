@@ -5,33 +5,20 @@ and writes to industry_weight.
 """
 
 import logging
-from datetime import date, datetime
+from datetime import date
 
 import asyncpg
 import pandas as pd
 
+from pipeline._dates import coerce_date
 from pipeline.fetchers.base import BaseFetcher
 
 logger = logging.getLogger(__name__)
 
-
-def _coerce_date(value) -> date:
-    """Normalize a `params['date']` value to a `datetime.date`.
-
-    asyncpg binds `DATE` columns from `datetime.date` objects, not strings —
-    passing an ISO string raises `AttributeError: 'str' object has no
-    attribute 'toordinal'`. Accept both so callers can keep their
-    serialization habits.
-    """
-    if value is None:
-        return date.today()
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, date):
-        return value
-    if isinstance(value, str):
-        return date.fromisoformat(value)
-    raise TypeError(f"weight_calculator: unsupported date value {value!r}")
+# Backwards-compat alias: tests/test_pipeline_transformers.py imports
+# `_coerce_date` from this module. The canonical helper now lives in
+# pipeline._dates so all fetchers can share it.
+_coerce_date = coerce_date
 
 
 class WeightCalculator(BaseFetcher):
