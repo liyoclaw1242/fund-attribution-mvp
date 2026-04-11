@@ -12,7 +12,12 @@ CREATE TABLE IF NOT EXISTS stock_info (
     updated_at  TIMESTAMPTZ DEFAULT now()
 );
 
--- 每日股價（分區表 by market prefix）
+-- 每日股價
+-- Note: previously PARTITION BY LIST (substring(stock_id, 1, 1)) but Postgres
+-- rejects a PRIMARY KEY on a partition key that is an expression
+-- (FeatureNotSupportedError). Partition pruning by first-char was never going
+-- to be efficient for TW/US mixed markets anyway, so we drop partitioning and
+-- rely on a plain table + (stock_id, date) PK + date index for range scans.
 CREATE TABLE IF NOT EXISTS stock_price (
     stock_id    TEXT NOT NULL,
     date        DATE NOT NULL,
@@ -22,11 +27,7 @@ CREATE TABLE IF NOT EXISTS stock_price (
     market_cap  NUMERIC(18,0),
     source      TEXT NOT NULL,
     PRIMARY KEY (stock_id, date)
-) PARTITION BY LIST (substring(stock_id, 1, 1));
-
--- Default partition for stock_price (catches all market prefixes)
-CREATE TABLE IF NOT EXISTS stock_price_default
-    PARTITION OF stock_price DEFAULT;
+);
 
 -- 產業指數（TWSE MI_INDEX）
 CREATE TABLE IF NOT EXISTS industry_index (
