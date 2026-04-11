@@ -58,29 +58,39 @@ class BaseFetcher(ABC):
     async def _load(self, pool: asyncpg.Pool, df: pd.DataFrame) -> int:
         """Bulk-insert a DataFrame into ``self.target_table``.
 
-        Uses asyncpg ``copy_records_to_table`` for speed.
-        Rows that violate unique constraints are skipped (ON CONFLICT DO NOTHING
-        is not available via COPY, so we use a temp table approach).
+        Uses asyncpg ``copy_records_to_table`` for speed, staging rows in a
+        transaction-scoped `_tmp_<target>` table so the final INSERT can use
+        `ON CONFLICT DO NOTHING` (unavailable via COPY).
+
+        The CREATE TEMP TABLE + COPY + INSERT sequence MUST run inside an
+        explicit transaction. In asyncpg's autocommit mode each statement is
+        its own implicit transaction, so a bare
+        `CREATE TEMP TABLE ... ON COMMIT DROP` would be dropped the instant it
+        was created, and the follow-up `copy_records_to_table` would fail with
+        `UndefinedTableError: relation "_tmp_<target>" does not exist`. Wrapping
+        everything in `conn.transaction()` keeps the temp table alive until the
+        block commits.
         """
         if df.empty or not self.target_table:
             return 0
 
         columns = list(df.columns)
         records = [tuple(row) for row in df.itertuples(index=False, name=None)]
+        tmp = f"_tmp_{self.target_table}"
+        cols_csv = ", ".join(columns)
 
         async with pool.acquire() as conn:
-            # Temp table -> COPY -> INSERT ... ON CONFLICT DO NOTHING
-            tmp = f"_tmp_{self.target_table}"
-            await conn.execute(
-                f"CREATE TEMP TABLE {tmp} (LIKE {self.target_table} INCLUDING DEFAULTS) ON COMMIT DROP"
-            )
-            await conn.copy_records_to_table(tmp, records=records, columns=columns)
-            cols_csv = ", ".join(columns)
-            result = await conn.execute(
-                f"INSERT INTO {self.target_table} ({cols_csv}) "
-                f"SELECT {cols_csv} FROM {tmp} "
-                f"ON CONFLICT DO NOTHING"
-            )
+            async with conn.transaction():
+                await conn.execute(
+                    f"CREATE TEMP TABLE {tmp} "
+                    f"(LIKE {self.target_table} INCLUDING DEFAULTS) ON COMMIT DROP"
+                )
+                await conn.copy_records_to_table(tmp, records=records, columns=columns)
+                result = await conn.execute(
+                    f"INSERT INTO {self.target_table} ({cols_csv}) "
+                    f"SELECT {cols_csv} FROM {tmp} "
+                    f"ON CONFLICT DO NOTHING"
+                )
             # result is e.g. "INSERT 0 42"
             count = int(result.split()[-1])
             return count
