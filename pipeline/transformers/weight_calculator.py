@@ -5,7 +5,7 @@ and writes to industry_weight.
 """
 
 import logging
-from datetime import date
+from datetime import date, datetime
 
 import asyncpg
 import pandas as pd
@@ -13,6 +13,25 @@ import pandas as pd
 from pipeline.fetchers.base import BaseFetcher
 
 logger = logging.getLogger(__name__)
+
+
+def _coerce_date(value) -> date:
+    """Normalize a `params['date']` value to a `datetime.date`.
+
+    asyncpg binds `DATE` columns from `datetime.date` objects, not strings —
+    passing an ISO string raises `AttributeError: 'str' object has no
+    attribute 'toordinal'`. Accept both so callers can keep their
+    serialization habits.
+    """
+    if value is None:
+        return date.today()
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        return date.fromisoformat(value)
+    raise TypeError(f"weight_calculator: unsupported date value {value!r}")
 
 
 class WeightCalculator(BaseFetcher):
@@ -32,7 +51,7 @@ class WeightCalculator(BaseFetcher):
         if pool is None:
             raise ValueError("WeightCalculator requires '_pool' in params")
 
-        target_date = params.get("date", date.today().isoformat())
+        target_date = _coerce_date(params.get("date"))
         markets = params.get("markets", ["twse", "us"])
 
         results = []
@@ -43,7 +62,7 @@ class WeightCalculator(BaseFetcher):
         return results
 
     async def _compute_weights(
-        self, pool: asyncpg.Pool, market: str, target_date: str
+        self, pool: asyncpg.Pool, market: str, target_date: date
     ) -> list[dict]:
         """Compute industry weights for a single market on a given date."""
         async with pool.acquire() as conn:
