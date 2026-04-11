@@ -6,7 +6,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pipeline.db import SCHEMA_PATH, create_pool, close_pool, execute_schema, log_pipeline_run
+from pipeline.db import (
+    SCHEMA_PATH,
+    close_pool,
+    create_pool,
+    execute_schema,
+    is_empty,
+    log_pipeline_run,
+)
 
 
 def _make_pool_with_conn(mock_conn):
@@ -130,3 +137,41 @@ class TestLogPipelineRun:
         call_args = mock_conn.fetchrow.call_args[0]
         finished_at_arg = call_args[3]
         assert finished_at_arg is not None
+
+
+class TestIsEmpty:
+    @pytest.mark.asyncio
+    async def test_empty_table_returns_true(self):
+        mock_conn = AsyncMock()
+        mock_conn.fetchrow = AsyncMock(return_value={"has_row": False})
+        mock_pool = _make_pool_with_conn(mock_conn)
+
+        assert await is_empty(mock_pool, "stock_info") is True
+        sql_arg = mock_conn.fetchrow.call_args[0][0]
+        assert "stock_info" in sql_arg
+        assert "EXISTS" in sql_arg.upper()
+
+    @pytest.mark.asyncio
+    async def test_populated_table_returns_false(self):
+        mock_conn = AsyncMock()
+        mock_conn.fetchrow = AsyncMock(return_value={"has_row": True})
+        mock_pool = _make_pool_with_conn(mock_conn)
+
+        assert await is_empty(mock_pool, "fund_holding") is False
+
+    @pytest.mark.asyncio
+    async def test_rejects_non_whitelisted_table(self):
+        """Whitelist guards against SQL injection via the table name."""
+        mock_pool = _make_pool_with_conn(AsyncMock())
+        with pytest.raises(ValueError, match="not in whitelist"):
+            await is_empty(mock_pool, "users; DROP TABLE stock_info--")
+
+    @pytest.mark.asyncio
+    async def test_all_seed_check_tables_whitelisted(self):
+        """Tables consulted by the scheduler initial seed must all be allowed."""
+        from pipeline.scheduler import SEED_CHECK_TABLES
+        mock_conn = AsyncMock()
+        mock_conn.fetchrow = AsyncMock(return_value={"has_row": False})
+        mock_pool = _make_pool_with_conn(mock_conn)
+        for table in SEED_CHECK_TABLES:
+            assert await is_empty(mock_pool, table) is True

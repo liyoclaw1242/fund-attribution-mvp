@@ -16,9 +16,13 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from pipeline.config import PipelineConfig
-from pipeline.db import close_pool, create_pool, execute_schema, log_pipeline_run
+from pipeline.db import close_pool, create_pool, execute_schema, is_empty, log_pipeline_run
 
 logger = logging.getLogger("pipeline.scheduler")
+
+# Tables consulted to decide whether the DB is empty and needs an initial
+# seed. If ANY of these contain rows, we treat the DB as already seeded.
+SEED_CHECK_TABLES: tuple[str, ...] = ("stock_info", "stock_price", "fund_holding")
 
 # ---------------------------------------------------------------------------
 # Schedule registry — each entry maps a logical fetcher name to its cron
@@ -77,9 +81,12 @@ class PipelineScheduler:
         self.pool = None
         self._start_time = time.monotonic()
         self._registered_fetchers: list[str] = []
+        self._registered_jobs: list[tuple[object, str]] = []
         self._last_run_time: str | None = None
         self._health_app: web.Application | None = None
         self._health_runner: web.AppRunner | None = None
+        self._seed_task: asyncio.Task | None = None
+        self._seed_status: str = "idle"  # 'idle' | 'running' | 'completed' | 'failed' | 'skipped'
 
     async def start(self) -> None:
         """Initialize pool, run migration, register jobs, start scheduler + health."""
@@ -108,6 +115,7 @@ class PipelineScheduler:
                 replace_existing=True,
             )
             self._registered_fetchers.append(entry["name"])
+            self._registered_jobs.append((fetcher, entry["name"]))
             logger.info("Registered: %s (%s)", entry["name"], entry["cron"])
 
         # 3. Start scheduler
@@ -119,10 +127,22 @@ class PipelineScheduler:
         # 4. Start health endpoint
         await self._start_health_server()
 
+        # 5. Trigger initial seed in background if DB is empty.
+        # Runs concurrently with the cron loop so startup is not blocked
+        # (seeding can take 5-10 minutes due to fetcher rate limits).
+        self._seed_task = asyncio.create_task(self._maybe_initial_seed())
+
     async def stop(self) -> None:
         """Graceful shutdown — stop scheduler, close pool, stop health server."""
         logger.info("Shutting down...")
         self.scheduler.shutdown(wait=False)
+
+        if self._seed_task and not self._seed_task.done():
+            self._seed_task.cancel()
+            try:
+                await self._seed_task
+            except (asyncio.CancelledError, Exception):
+                pass
 
         if self._health_runner:
             await self._health_runner.cleanup()
@@ -131,18 +151,94 @@ class PipelineScheduler:
             await close_pool(self.pool)
             logger.info("Connection pool closed")
 
-    async def _run_fetcher(self, fetcher, name: str) -> None:
-        """Execute a single fetcher with error isolation."""
+    # -- Initial seeding --------------------------------------------------
+
+    async def _is_db_empty(self) -> bool:
+        """Return True when every seed-check table has zero rows."""
+        for table in SEED_CHECK_TABLES:
+            try:
+                if not await is_empty(self.pool, table):
+                    return False
+            except Exception:
+                logger.exception("is_empty check failed for %s — assuming non-empty", table)
+                return False
+        return True
+
+    async def _maybe_initial_seed(self) -> None:
+        """Run all fetchers once if the DB looks empty.
+
+        Designed to run as a background task so cron scheduling can begin
+        immediately. On subsequent restarts (tables non-empty) this is a
+        no-op besides the emptiness check.
+        """
+        try:
+            empty = await self._is_db_empty()
+        except Exception:
+            logger.exception("Initial seed check failed — skipping seed")
+            self._seed_status = "failed"
+            return
+
+        if not empty:
+            logger.info("DB already populated — skipping initial seed")
+            self._seed_status = "skipped"
+            return
+
+        logger.info("Empty DB detected — running initial seed (%d fetchers)",
+                    len(self._registered_jobs))
+        self._seed_status = "running"
+        seed_started = datetime.now(timezone.utc)
+
+        await log_pipeline_run(
+            self.pool,
+            fetcher="_initial_seed",
+            status="running",
+            started_at=seed_started,
+            params_json={"fetchers": [name for _, name in self._registered_jobs]},
+        )
+
+        success_count = 0
+        for fetcher, name in self._registered_jobs:
+            try:
+                if await self._run_fetcher(fetcher, name):
+                    success_count += 1
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Initial seed: fetcher %s raised", name)
+
+        await log_pipeline_run(
+            self.pool,
+            fetcher="_initial_seed",
+            status="success" if success_count == len(self._registered_jobs) else "partial",
+            rows_count=success_count,
+            started_at=seed_started,
+        )
+        self._seed_status = "completed"
+        logger.info(
+            "Initial seed complete — %d/%d fetchers ran",
+            success_count,
+            len(self._registered_jobs),
+        )
+
+    async def _run_fetcher(self, fetcher, name: str) -> bool:
+        """Execute a single fetcher with error isolation.
+
+        Returns True on success, False on failure. The boolean is used by
+        the initial-seed flow to count partial successes; APScheduler's
+        cron path ignores the return value.
+        """
         logger.info("Running: %s", name)
         try:
             count = await fetcher.run(self.pool)
             self._last_run_time = datetime.now(timezone.utc).isoformat()
             logger.info("Completed: %s — %d rows", name, count)
+            return True
         except Exception:
             self._last_run_time = datetime.now(timezone.utc).isoformat()
             logger.exception("Failed: %s", name)
             # Error is already logged to pipeline_run by BaseFetcher.run()
             # Scheduler continues — other fetchers are unaffected.
+            return False
 
     # -- Health endpoint --------------------------------------------------
 
@@ -168,6 +264,7 @@ class PipelineScheduler:
             "registered": self._registered_fetchers,
             "last_run": self._last_run_time,
             "uptime": f"{hours}h{minutes}m{seconds}s",
+            "seed": self._seed_status,
         }
         return web.json_response(body)
 
